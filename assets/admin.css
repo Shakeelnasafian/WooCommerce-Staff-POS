@@ -1,0 +1,234 @@
+.wc-staff-pos-wrap {
+  margin-top: 20px;
+}
+
+.wc-staff-pos-app {
+  --wc-pos-border: #d9dce3;
+  --wc-pos-accent: #0b6b50;
+  --wc-pos-accent-soft: #e3f4ee;
+  --wc-pos-warning: #985e0d;
+  --wc-pos-bg: #f6f7f7;
+  --wc-pos-card: #ffffff;
+  color: #17212b;
+}
+
+.wc-staff-pos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.wc-staff-pos-header h1 {
+  margin: 0 0 6px;
+}
+
+.wc-staff-pos-status {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--wc-pos-accent-soft);
+  color: var(--wc-pos-accent);
+  font-weight: 600;
+}
+
+.wc-staff-pos-banner,
+.wc-staff-pos-notice {
+  border: 1px solid var(--wc-pos-border);
+  background: #fff8d6;
+  color: #5a4300;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.wc-staff-pos-notice.error {
+  background: #fbeaea;
+  color: #7b1e1e;
+}
+
+.wc-staff-pos-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.05fr) minmax(320px, 1.25fr) minmax(320px, 1.1fr);
+  gap: 16px;
+}
+
+.wc-staff-pos-panel {
+  background: var(--wc-pos-card);
+  border: 1px solid var(--wc-pos-border);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 8px 20px rgba(12, 26, 75, 0.05);
+}
+
+.wc-staff-pos-panel h2,
+.wc-staff-pos-panel h3 {
+  margin-top: 0;
+}
+
+.wc-staff-pos-search,
+.wc-staff-pos-field input,
+.wc-staff-pos-field select {
+  width: 100%;
+  border: 1px solid var(--wc-pos-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.wc-staff-pos-field {
+  display: block;
+}
+
+.wc-staff-pos-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #586574;
+  margin-bottom: 6px;
+}
+
+.wc-staff-pos-form-grid,
+.wc-staff-pos-product-detail,
+.wc-staff-pos-selected-customer,
+.wc-staff-pos-actions,
+.wc-staff-pos-order-result {
+  display: grid;
+  gap: 12px;
+}
+
+.wc-staff-pos-customer-results,
+.wc-staff-pos-product-list,
+.wc-staff-pos-cart-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 18px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.wc-staff-pos-list-item,
+.wc-staff-pos-product-card {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  width: 100%;
+  border: 1px solid var(--wc-pos-border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.wc-staff-pos-list-item.is-active,
+.wc-staff-pos-product-card.is-active {
+  border-color: var(--wc-pos-accent);
+  box-shadow: 0 0 0 3px rgba(11, 107, 80, 0.12);
+}
+
+.wc-staff-pos-meta {
+  font-size: 12px;
+  color: #6b7784;
+}
+
+.wc-staff-pos-price {
+  font-weight: 700;
+}
+
+.wc-staff-pos-badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wc-staff-pos-badge.is-warning,
+.wc-staff-pos-warning {
+  color: var(--wc-pos-warning);
+  background: #fff2d8;
+}
+
+.wc-staff-pos-cart-item {
+  border: 1px solid var(--wc-pos-border);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.wc-staff-pos-cart-item-controls {
+  display: grid;
+  grid-template-columns: 74px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.wc-staff-pos-cart-attributes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  color: #566272;
+}
+
+.wc-staff-pos-cart-attributes span {
+  background: #eef2f6;
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.wc-staff-pos-totals {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.wc-staff-pos-totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wc-staff-pos-totals .is-total {
+  font-size: 18px;
+  font-weight: 700;
+  padding-top: 8px;
+  border-top: 1px solid var(--wc-pos-border);
+}
+
+.wc-staff-pos-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.wc-staff-pos-actions .button {
+  min-height: 42px;
+}
+
+.wc-staff-pos-order-result {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #edf7f3;
+  border: 1px solid #c9e8dc;
+}
+
+.wc-staff-pos-empty-state {
+  color: #61707f;
+}
+
+@media (max-width: 1280px) {
+  .wc-staff-pos-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wc-staff-pos-actions {
+    grid-template-columns: 1fr;
+  }
+}
