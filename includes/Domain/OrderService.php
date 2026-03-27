@@ -133,6 +133,7 @@ final class OrderService
 			'cart'  => [
 				'items'     => [],
 				'itemCount' => 0,
+				'coupons'   => [],
 				'totals'    => [
 					'currencyCode' => get_woocommerce_currency(),
 					'subtotal'     => 0,

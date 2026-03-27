@@ -38,6 +38,7 @@ final class Router
 			new ProductsController($this->product_adapter),
 			new CustomersController(),
 			new CartController($this->cart_context, $this->product_adapter),
+			new CouponsController($this->cart_context),
 			new OrdersController($this->cart_context, $this->order_service),
 		];
 

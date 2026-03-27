@@ -93,10 +93,18 @@
 .wc-staff-pos-form-grid,
 .wc-staff-pos-product-detail,
 .wc-staff-pos-selected-customer,
+.wc-staff-pos-coupon-tools,
 .wc-staff-pos-actions,
 .wc-staff-pos-order-result {
   display: grid;
   gap: 12px;
+}
+
+.wc-staff-pos-inline-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
 }
 
 .wc-staff-pos-customer-results,
@@ -187,6 +195,23 @@
   display: grid;
   gap: 8px;
   padding-top: 8px;
+}
+
+.wc-staff-pos-coupon-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wc-staff-pos-coupon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef6f1;
+  border: 1px solid #cfe1d8;
+  font-size: 12px;
 }
 
 .wc-staff-pos-totals > div {

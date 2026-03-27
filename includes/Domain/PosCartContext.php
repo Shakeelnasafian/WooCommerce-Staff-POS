@@ -111,6 +111,7 @@ final class PosCartContext
 		return [
 			'items'          => $items,
 			'itemCount'      => WC()->cart->get_cart_contents_count(),
+			'coupons'        => $this->get_applied_coupons(),
 			'supportedTypes' => $this->product_adapter->get_supported_types(),
 			'totals'         => [
 				'currencyCode' => get_woocommerce_currency(),
@@ -232,6 +233,31 @@ final class PosCartContext
 	private function get_storage_key(): string
 	{
 		return self::STORAGE_PREFIX . get_current_user_id();
+	}
+
+	/**
+	 * @return array<int, array<string, string>>
+	 */
+	private function get_applied_coupons(): array
+	{
+		$coupons = [];
+
+		foreach (WC()->cart->get_applied_coupons() as $code) {
+			$formatted_code = function_exists('wc_format_coupon_code')
+				? wc_format_coupon_code((string) $code)
+				: wc_clean((string) $code);
+
+			if ('' === $formatted_code) {
+				continue;
+			}
+
+			$coupons[] = [
+				'code'  => $formatted_code,
+				'label' => $formatted_code,
+			];
+		}
+
+		return $coupons;
 	}
 
 	/**

@@ -42,6 +42,10 @@
     );
   }
 
+  function createEmptyCart() {
+    return { items: [], itemCount: 0, coupons: [], totals: {}, notices: [] };
+  }
+
   function findVariation(product, selectedAttributes) {
     if (!product || !product.variations || !product.variations.length) {
       return null;
@@ -141,7 +145,7 @@
     var _a = useState(null),
       bootstrap = _a[0],
       setBootstrap = _a[1];
-    var _b = useState({ items: [], itemCount: 0, totals: {}, notices: [] }),
+    var _b = useState(createEmptyCart()),
       cart = _b[0],
       setCart = _b[1];
     var _c = useState([]),
@@ -178,17 +182,20 @@
       tenderType = _m[0],
       setTenderType = _m[1];
     var _n = useState(''),
-      feedback = _n[0],
-      setFeedback = _n[1];
-    var _o = useState(null),
-      orderResult = _o[0],
-      setOrderResult = _o[1];
-    var _p = useState(false),
-      loading = _p[0],
-      setLoading = _p[1];
-    var _q = useState(''),
-      busyAction = _q[0],
-      setBusyAction = _q[1];
+      couponCode = _n[0],
+      setCouponCode = _n[1];
+    var _o = useState(''),
+      feedback = _o[0],
+      setFeedback = _o[1];
+    var _p = useState(null),
+      orderResult = _p[0],
+      setOrderResult = _p[1];
+    var _q = useState(false),
+      loading = _q[0],
+      setLoading = _q[1];
+    var _r = useState(''),
+      busyAction = _r[0],
+      setBusyAction = _r[1];
 
     var selectedVariation = useMemo(function () {
       return findVariation(selectedProduct, selectedAttributes);
@@ -199,7 +206,7 @@
       request('/bootstrap')
         .then(function (response) {
           setBootstrap(response);
-          setCart(response.cart || { items: [], itemCount: 0, totals: {}, notices: [] });
+          setCart(response.cart || createEmptyCart());
         })
         .catch(function (error) {
           setFeedback(error.message || 'Failed to load Staff POS.');
@@ -260,7 +267,7 @@
     }, [selectedProductId]);
 
     function syncCart(nextCart) {
-      setCart(nextCart || { items: [], itemCount: 0, totals: {}, notices: [] });
+      setCart(nextCart || createEmptyCart());
     }
 
     function handleCustomerDraftChange(key, value) {
@@ -349,6 +356,47 @@
         })
         .catch(function (error) {
           setFeedback(error.message || 'Cart item could not be removed.');
+        });
+    }
+
+    function handleApplyCoupon() {
+      if (!couponCode.trim()) {
+        return;
+      }
+
+      setBusyAction('apply-coupon');
+      request('/cart/coupons', {
+        method: 'POST',
+        data: { code: couponCode }
+      })
+        .then(function (response) {
+          syncCart(response.cart);
+          setCouponCode('');
+          setFeedback('Coupon applied to the POS cart.');
+        })
+        .catch(function (error) {
+          setFeedback(error.message || 'Coupon could not be applied.');
+        })
+        .finally(function () {
+          setBusyAction('');
+        });
+    }
+
+    function handleRemoveCoupon(code) {
+      setBusyAction('remove-coupon-' + code);
+      request('/cart/coupons', {
+        method: 'DELETE',
+        data: { code: code }
+      })
+        .then(function (response) {
+          syncCart(response.cart);
+          setFeedback('Coupon removed from the POS cart.');
+        })
+        .catch(function (error) {
+          setFeedback(error.message || 'Coupon could not be removed.');
+        })
+        .finally(function () {
+          setBusyAction('');
         });
     }
 
@@ -596,6 +644,63 @@
                 })
               )
             : h('p', { className: 'wc-staff-pos-empty-state' }, 'No items in the POS cart yet.'),
+          h(
+            'div',
+            { className: 'wc-staff-pos-coupon-tools' },
+            h(
+              Field,
+              { label: 'Coupon code' },
+              h(
+                'div',
+                { className: 'wc-staff-pos-inline-field' },
+                h('input', {
+                  value: couponCode,
+                  placeholder: 'Enter coupon code',
+                  onChange: function (event) {
+                    setCouponCode(event.target.value);
+                  }
+                }),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'button button-secondary',
+                    disabled: busyAction === 'apply-coupon' || !couponCode.trim(),
+                    onClick: handleApplyCoupon
+                  },
+                  busyAction === 'apply-coupon' ? 'Applying...' : 'Apply coupon'
+                )
+              )
+            ),
+            cart && cart.coupons && cart.coupons.length
+              ? h(
+                  'div',
+                  { className: 'wc-staff-pos-coupon-list' },
+                  cart.coupons.map(function (coupon) {
+                    return h(
+                      'div',
+                      {
+                        key: 'coupon-' + coupon.code,
+                        className: 'wc-staff-pos-coupon-pill'
+                      },
+                      h('span', null, coupon.label || coupon.code),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'button button-link-delete',
+                          disabled: busyAction === 'remove-coupon-' + coupon.code,
+                          onClick: function () {
+                            handleRemoveCoupon(coupon.code);
+                          }
+                        },
+                        busyAction === 'remove-coupon-' + coupon.code ? 'Removing...' : 'Remove'
+                      )
+                    );
+                  })
+                )
+              : null
+          ),
           h(
             'div',
             { className: 'wc-staff-pos-totals' },
