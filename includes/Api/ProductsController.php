@@ -49,45 +49,61 @@ final class ProductsController extends Controller
 
 	public function get_items(WP_REST_Request $request): array
 	{
-		$query = sanitize_text_field((string) $request->get_param('q'));
-		$limit = max(1, min(50, (int) ($request->get_param('limit') ?: 20)));
+		$query    = sanitize_text_field((string) $request->get_param('q'));
+		$limit    = max(1, min(50, (int) ($request->get_param('limit') ?: 20)));
+		$category = absint($request->get_param('category'));
 
-		// Search by SKU first (exact/prefix match), then by name/title.
+		$base_args = [
+			'post_type'   => 'product',
+			'post_status' => 'publish',
+			'fields'      => 'ids',
+		];
+
+		if ($category > 0) {
+			$base_args['tax_query'] = [
+				[
+					'taxonomy' => 'product_cat',
+					'field'    => 'term_id',
+					'terms'    => $category,
+				],
+			];
+		}
+
+		// Search by SKU first (LIKE match), then by title/content.
 		$sku_ids = [];
 
 		if ('' !== $query) {
 			$sku_ids = get_posts(
-				[
-					'post_type'      => 'product',
-					'post_status'    => 'publish',
-					'posts_per_page' => $limit,
-					'fields'         => 'ids',
-					'meta_query'     => [
-						[
-							'key'     => '_sku',
-							'value'   => $query,
-							'compare' => 'LIKE',
+				array_merge(
+					$base_args,
+					[
+						'posts_per_page' => $limit,
+						'meta_query'     => [
+							[
+								'key'     => '_sku',
+								'value'   => $query,
+								'compare' => 'LIKE',
+							],
 						],
-					],
-				]
+					]
+				)
 			);
 		}
 
 		$name_ids = get_posts(
-			[
-				'post_type'      => 'product',
-				'post_status'    => 'publish',
-				'posts_per_page' => $limit,
-				's'              => $query,
-				'orderby'        => 'date',
-				'order'          => 'DESC',
-				'fields'         => 'ids',
-			]
+			array_merge(
+				$base_args,
+				[
+					'posts_per_page' => $limit,
+					's'              => $query,
+					'orderby'        => 'date',
+					'order'          => 'DESC',
+				]
+			)
 		);
 
 		// SKU matches take priority; deduplicate and respect the limit.
-		$ids   = array_values(array_unique(array_merge((array) $sku_ids, (array) $name_ids)));
-		$ids   = array_slice($ids, 0, $limit);
+		$ids   = array_slice(array_values(array_unique(array_merge((array) $sku_ids, (array) $name_ids))), 0, $limit);
 		$items = [];
 
 		foreach ($ids as $product_id) {

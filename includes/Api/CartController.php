@@ -139,6 +139,13 @@ final class CartController extends Controller
 			return $payload;
 		}
 
+		// Optional staff price override (requires wc_staff_pos_price_override cap).
+		$custom_price = (float) $request->get_param('custom_price');
+
+		if ($custom_price > 0 && current_user_can('wc_staff_pos_price_override')) {
+			$payload['cart_item_data']['_wc_pos_custom_price'] = $custom_price;
+		}
+
 		return $this->cart_context->run(
 			function () use ($payload): array|WP_Error {
 				$result = WC()->cart->add_to_cart(

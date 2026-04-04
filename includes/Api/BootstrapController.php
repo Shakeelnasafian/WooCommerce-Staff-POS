@@ -46,7 +46,9 @@ final class BootstrapController extends Controller
 				'email' => wp_get_current_user()->user_email,
 			],
 			'capabilities'          => [
-				'manage_woocommerce' => current_user_can('manage_woocommerce'),
+				'manage_woocommerce'         => current_user_can('manage_woocommerce'),
+				'wc_staff_pos'               => current_user_can('wc_staff_pos'),
+				'wc_staff_pos_price_override' => current_user_can('wc_staff_pos_price_override'),
 			],
 			'supportedProductTypes' => $this->product_adapter->get_supported_types(),
 			'cart'                  => $this->cart_context->run(
@@ -55,6 +57,8 @@ final class BootstrapController extends Controller
 			'manualTenderTypes'     => [
 				['value' => 'cash', 'label' => __('Cash', 'wc-staff-pos')],
 				['value' => 'manual', 'label' => __('Manual', 'wc-staff-pos')],
+				['value' => 'card', 'label' => __('Card', 'wc-staff-pos')],
+				['value' => 'cheque', 'label' => __('Cheque', 'wc-staff-pos')],
 			],
 		];
 	}

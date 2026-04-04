@@ -27,7 +27,7 @@ final class Page
 			'woocommerce',
 			__('Staff POS', 'wc-staff-pos'),
 			__('Staff POS', 'wc-staff-pos'),
-			'manage_woocommerce',
+			'wc_staff_pos',
 			'wc-staff-pos',
 			[$this, 'render']
 		);
@@ -71,7 +71,7 @@ final class Page
 
 	public function render(): void
 	{
-		if (! current_user_can('manage_woocommerce')) {
+		if (! current_user_can('wc_staff_pos')) {
 			wp_die(esc_html__('You are not allowed to access Staff POS.', 'wc-staff-pos'));
 		}
 

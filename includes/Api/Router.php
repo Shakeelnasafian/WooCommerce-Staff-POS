@@ -36,9 +36,11 @@ final class Router
 		$controllers = [
 			new BootstrapController($this->cart_context, $this->product_adapter),
 			new ProductsController($this->product_adapter),
+			new CategoriesController(),
 			new CustomersController(),
 			new CartController($this->cart_context, $this->product_adapter),
 			new OrdersController($this->cart_context, $this->order_service),
+			new OrderHistoryController(),
 		];
 
 		foreach ($controllers as $controller) {
