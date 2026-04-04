@@ -112,6 +112,7 @@ final class PosCartContext
 			'items'          => $items,
 			'itemCount'      => WC()->cart->get_cart_contents_count(),
 			'supportedTypes' => $this->product_adapter->get_supported_types(),
+			'appliedCoupons' => WC()->cart->get_applied_coupons(),
 			'totals'         => [
 				'currencyCode' => get_woocommerce_currency(),
 				'subtotal'     => (float) WC()->cart->get_subtotal(),

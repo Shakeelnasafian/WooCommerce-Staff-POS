@@ -118,6 +118,12 @@ final class OrderService
 			$order->payment_complete();
 		}
 
+		$note = sanitize_text_field((string) ($payload['note'] ?? ''));
+
+		if ('' !== $note) {
+			$order->add_order_note($note, 0, true);
+		}
+
 		$order->calculate_totals(true);
 		$order->save();
 		WC()->cart->empty_cart();
@@ -131,9 +137,10 @@ final class OrderService
 				'paymentUrl' => $order->needs_payment() ? $order->get_checkout_payment_url() : '',
 			],
 			'cart'  => [
-				'items'     => [],
-				'itemCount' => 0,
-				'totals'    => [
+				'items'          => [],
+				'itemCount'      => 0,
+				'appliedCoupons' => [],
+				'totals'         => [
 					'currencyCode' => get_woocommerce_currency(),
 					'subtotal'     => 0,
 					'subtotalHtml' => wc_price(0),
@@ -144,7 +151,7 @@ final class OrderService
 					'total'        => 0,
 					'totalHtml'    => wc_price(0),
 				],
-				'notices'   => [],
+				'notices'        => [],
 			],
 		];
 	}

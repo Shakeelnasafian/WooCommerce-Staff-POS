@@ -141,13 +141,17 @@ final class CustomersController extends Controller
 
 	private function map_customer(WP_User $user): array
 	{
-		$name = trim($user->first_name . ' ' . $user->last_name);
+		$first_name = (string) ($user->first_name ?: '');
+		$last_name  = (string) ($user->last_name ?: '');
+		$name       = trim($first_name . ' ' . $last_name);
 
 		return [
-			'id'    => $user->ID,
-			'name'  => $name ?: $user->display_name,
-			'email' => $user->user_email,
-			'phone' => (string) get_user_meta($user->ID, 'billing_phone', true),
+			'id'        => $user->ID,
+			'name'      => $name ?: $user->display_name,
+			'firstName' => $first_name,
+			'lastName'  => $last_name,
+			'email'     => $user->user_email,
+			'phone'     => (string) get_user_meta($user->ID, 'billing_phone', true),
 		];
 	}
 }

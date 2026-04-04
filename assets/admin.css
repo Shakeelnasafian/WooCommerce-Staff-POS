@@ -12,6 +12,7 @@
   color: #17212b;
 }
 
+/* ---- Header ---- */
 .wc-staff-pos-header {
   display: flex;
   justify-content: space-between;
@@ -24,15 +25,52 @@
   margin: 0 0 6px;
 }
 
+.wc-staff-pos-header p {
+  margin: 0;
+  color: #586574;
+  font-size: 13px;
+}
+
 .wc-staff-pos-status {
   padding: 10px 14px;
   border-radius: 999px;
   background: var(--wc-pos-accent-soft);
   color: var(--wc-pos-accent);
   font-weight: 600;
+  white-space: nowrap;
 }
 
-.wc-staff-pos-banner,
+/* ---- Feedback banner ---- */
+.wc-staff-pos-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--wc-pos-border);
+  background: #fff8d6;
+  color: #5a4300;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.wc-staff-pos-banner-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: inherit;
+  padding: 0 4px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.wc-staff-pos-banner-close:hover {
+  opacity: 1;
+}
+
+/* ---- Cart notices ---- */
 .wc-staff-pos-notice {
   border: 1px solid var(--wc-pos-border);
   background: #fff8d6;
@@ -47,12 +85,14 @@
   color: #7b1e1e;
 }
 
+/* ---- Grid ---- */
 .wc-staff-pos-grid {
   display: grid;
   grid-template-columns: minmax(280px, 1.05fr) minmax(320px, 1.25fr) minmax(320px, 1.1fr);
   gap: 16px;
 }
 
+/* ---- Panel ---- */
 .wc-staff-pos-panel {
   background: var(--wc-pos-card);
   border: 1px solid var(--wc-pos-border);
@@ -66,14 +106,24 @@
   margin-top: 0;
 }
 
+/* ---- Form controls ---- */
 .wc-staff-pos-search,
 .wc-staff-pos-field input,
-.wc-staff-pos-field select {
+.wc-staff-pos-field select,
+.wc-staff-pos-textarea {
   width: 100%;
   border: 1px solid var(--wc-pos-border);
   border-radius: 10px;
   padding: 10px 12px;
   background: #fff;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.wc-staff-pos-textarea {
+  resize: vertical;
+  min-height: 56px;
 }
 
 .wc-staff-pos-field {
@@ -90,15 +140,7 @@
   margin-bottom: 6px;
 }
 
-.wc-staff-pos-form-grid,
-.wc-staff-pos-product-detail,
-.wc-staff-pos-selected-customer,
-.wc-staff-pos-actions,
-.wc-staff-pos-order-result {
-  display: grid;
-  gap: 12px;
-}
-
+/* ---- Customer results ---- */
 .wc-staff-pos-customer-results,
 .wc-staff-pos-product-list,
 .wc-staff-pos-cart-list {
@@ -109,10 +151,11 @@
   overflow: auto;
 }
 
+/* ---- List & product card items ---- */
 .wc-staff-pos-list-item,
 .wc-staff-pos-product-card {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  gap: 10px;
   text-align: left;
   width: 100%;
   border: 1px solid var(--wc-pos-border);
@@ -120,6 +163,12 @@
   background: #fff;
   padding: 12px;
   cursor: pointer;
+  align-items: flex-start;
+}
+
+.wc-staff-pos-list-item {
+  flex-direction: column;
+  gap: 4px;
 }
 
 .wc-staff-pos-list-item.is-active,
@@ -128,15 +177,49 @@
   box-shadow: 0 0 0 3px rgba(11, 107, 80, 0.12);
 }
 
+.wc-staff-pos-product-card.is-out-of-stock {
+  opacity: 0.65;
+}
+
+/* ---- Product card image + body ---- */
+.wc-staff-pos-product-image {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  border: 1px solid var(--wc-pos-border);
+}
+
+.wc-staff-pos-product-card-body {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.wc-staff-pos-product-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/* ---- Misc meta & price ---- */
 .wc-staff-pos-meta {
   font-size: 12px;
   color: #6b7784;
+}
+
+.wc-staff-pos-out-of-stock-text {
+  color: var(--wc-pos-warning) !important;
 }
 
 .wc-staff-pos-price {
   font-weight: 700;
 }
 
+/* ---- Badges ---- */
 .wc-staff-pos-badge {
   display: inline-flex;
   width: fit-content;
@@ -154,6 +237,34 @@
   background: #fff2d8;
 }
 
+.wc-staff-pos-status-badge {
+  background: var(--wc-pos-accent-soft);
+  color: var(--wc-pos-accent);
+  text-transform: capitalize;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* ---- Product detail ---- */
+.wc-staff-pos-product-detail {
+  display: grid;
+  gap: 12px;
+}
+
+/* ---- Cart header ---- */
+.wc-staff-pos-cart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.wc-staff-pos-cart-header h2 {
+  margin-bottom: 0;
+}
+
+/* ---- Cart item ---- */
 .wc-staff-pos-cart-item {
   border: 1px solid var(--wc-pos-border);
   border-radius: 14px;
@@ -183,10 +294,64 @@
   padding: 4px 8px;
 }
 
+/* ---- Coupon row ---- */
+.wc-staff-pos-coupon-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.wc-staff-pos-coupon-input {
+  flex: 1;
+  border: 1px solid var(--wc-pos-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+}
+
+/* ---- Applied coupons ---- */
+.wc-staff-pos-applied-coupons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.wc-staff-pos-coupon-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--wc-pos-accent-soft);
+  color: var(--wc-pos-accent);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wc-staff-pos-coupon-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+  padding: 0;
+  opacity: 0.7;
+}
+
+.wc-staff-pos-coupon-remove:hover {
+  opacity: 1;
+}
+
+/* ---- Totals ---- */
 .wc-staff-pos-totals {
   display: grid;
   gap: 8px;
   padding-top: 8px;
+  margin-top: 8px;
 }
 
 .wc-staff-pos-totals > div {
@@ -202,27 +367,92 @@
   border-top: 1px solid var(--wc-pos-border);
 }
 
+/* ---- Selected customer ---- */
+.wc-staff-pos-selected-customer {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--wc-pos-accent-soft);
+  border-radius: 12px;
+  border: 1px solid #b5dece;
+}
+
+.wc-staff-pos-selected-customer p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.wc-staff-pos-selected-customer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.wc-staff-pos-deselect-btn {
+  font-size: 12px !important;
+  padding: 0 !important;
+}
+
+/* ---- Form grid ---- */
+.wc-staff-pos-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+/* ---- Action buttons ---- */
 .wc-staff-pos-actions {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   margin-top: 14px;
 }
 
 .wc-staff-pos-actions .button {
   min-height: 42px;
+  justify-content: center;
 }
 
+/* ---- Order result ---- */
 .wc-staff-pos-order-result {
   margin-top: 16px;
   padding: 14px;
   border-radius: 14px;
   background: #edf7f3;
   border: 1px solid #c9e8dc;
+  display: grid;
+  gap: 10px;
 }
 
+.wc-staff-pos-order-result-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wc-staff-pos-order-result-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wc-staff-pos-copy-btn {
+  font-size: 12px !important;
+}
+
+.wc-staff-pos-new-transaction-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ---- Empty state ---- */
 .wc-staff-pos-empty-state {
   color: #61707f;
 }
 
+/* ---- Responsive ---- */
 @media (max-width: 1280px) {
   .wc-staff-pos-grid {
     grid-template-columns: 1fr;

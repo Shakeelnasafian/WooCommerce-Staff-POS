@@ -59,6 +59,7 @@ final class OrdersController extends Controller
 					'tender_type' => sanitize_text_field((string) $request->get_param('tender_type')),
 					'customer_id' => (int) $request->get_param('customer_id'),
 					'billing'     => (array) ($request->get_param('billing') ?: []),
+					'note'        => sanitize_text_field((string) ($request->get_param('note') ?: '')),
 				]
 			)
 		);

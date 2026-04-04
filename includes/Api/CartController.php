@@ -33,6 +33,11 @@ final class CartController extends Controller
 					'callback'            => [$this, 'get_cart'],
 					'permission_callback' => [$this, 'permissions_check'],
 				],
+				[
+					'methods'             => 'DELETE',
+					'callback'            => [$this, 'clear_cart'],
+					'permission_callback' => [$this, 'permissions_check'],
+				],
 			]
 		);
 
@@ -60,6 +65,30 @@ final class CartController extends Controller
 				[
 					'methods'             => 'DELETE',
 					'callback'            => [$this, 'delete_item'],
+					'permission_callback' => [$this, 'permissions_check'],
+				],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/cart/coupons',
+			[
+				[
+					'methods'             => 'POST',
+					'callback'            => [$this, 'apply_coupon'],
+					'permission_callback' => [$this, 'permissions_check'],
+				],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/cart/coupons/(?P<code>[^/]+)',
+			[
+				[
+					'methods'             => 'DELETE',
+					'callback'            => [$this, 'remove_coupon'],
 					'permission_callback' => [$this, 'permissions_check'],
 				],
 			]
@@ -180,6 +209,69 @@ final class CartController extends Controller
 					);
 				}
 
+				WC()->cart->calculate_totals();
+
+				return ['cart' => $this->cart_context->get_snapshot()];
+			}
+		);
+	}
+
+	public function clear_cart(WP_REST_Request $request): array
+	{
+		unset($request);
+
+		return $this->cart_context->run(
+			function (): array {
+				WC()->cart->empty_cart();
+
+				return ['cart' => $this->cart_context->get_snapshot()];
+			}
+		);
+	}
+
+	public function apply_coupon(WP_REST_Request $request): array|WP_Error
+	{
+		$code = wc_format_coupon_code((string) $request->get_param('code'));
+
+		if ('' === $code) {
+			return new WP_Error(
+				'wc_staff_pos_invalid_coupon_code',
+				__('A coupon code is required.', 'wc-staff-pos'),
+				['status' => 400]
+			);
+		}
+
+		return $this->cart_context->run(
+			function () use ($code): array|WP_Error {
+				$applied = WC()->cart->apply_coupon($code);
+
+				if (! $applied) {
+					$messages = $this->cart_context->drain_notices();
+
+					return new WP_Error(
+						'wc_staff_pos_coupon_apply_failed',
+						$messages[0]['message'] ?? __('The coupon could not be applied.', 'wc-staff-pos'),
+						[
+							'status'  => 400,
+							'notices' => $messages,
+						]
+					);
+				}
+
+				WC()->cart->calculate_totals();
+
+				return ['cart' => $this->cart_context->get_snapshot()];
+			}
+		);
+	}
+
+	public function remove_coupon(WP_REST_Request $request): array
+	{
+		$code = wc_format_coupon_code((string) $request['code']);
+
+		return $this->cart_context->run(
+			function () use ($code): array {
+				WC()->cart->remove_coupon($code);
 				WC()->cart->calculate_totals();
 
 				return ['cart' => $this->cart_context->get_snapshot()];

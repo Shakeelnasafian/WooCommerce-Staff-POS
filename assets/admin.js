@@ -73,17 +73,31 @@
       'button',
       {
         type: 'button',
-        className: classNames('wc-staff-pos-product-card', props.active && 'is-active'),
+        className: classNames('wc-staff-pos-product-card', props.active && 'is-active', !props.product.inStock && 'is-out-of-stock'),
         onClick: function () {
           props.onSelect(props.product.id);
         }
       },
-      h('strong', null, props.product.name),
-      h('span', { className: 'wc-staff-pos-meta' }, props.product.type),
-      h('span', { className: 'wc-staff-pos-price' }, htmlNode(props.product.priceHtml || '')),
-      !props.product.isSupported
-        ? h('span', { className: 'wc-staff-pos-badge is-warning' }, 'Unsupported')
-        : null
+      props.product.image
+        ? h('img', { src: props.product.image, alt: '', className: 'wc-staff-pos-product-image', 'aria-hidden': 'true' })
+        : null,
+      h(
+        'div',
+        { className: 'wc-staff-pos-product-card-body' },
+        h('strong', null, props.product.name),
+        props.product.sku ? h('span', { className: 'wc-staff-pos-meta' }, 'SKU: ' + props.product.sku) : null,
+        h('span', { className: 'wc-staff-pos-price' }, htmlNode(props.product.priceHtml || '')),
+        h(
+          'div',
+          { className: 'wc-staff-pos-product-card-badges' },
+          !props.product.inStock
+            ? h('span', { className: 'wc-staff-pos-badge is-warning' }, 'Out of stock')
+            : null,
+          !props.product.isSupported
+            ? h('span', { className: 'wc-staff-pos-badge is-warning' }, 'Unsupported')
+            : null
+        )
+      )
     );
   }
 
@@ -141,7 +155,7 @@
     var _a = useState(null),
       bootstrap = _a[0],
       setBootstrap = _a[1];
-    var _b = useState({ items: [], itemCount: 0, totals: {}, notices: [] }),
+    var _b = useState({ items: [], itemCount: 0, totals: {}, appliedCoupons: [], notices: [] }),
       cart = _b[0],
       setCart = _b[1];
     var _c = useState([]),
@@ -189,17 +203,36 @@
     var _q = useState(''),
       busyAction = _q[0],
       setBusyAction = _q[1];
+    var _r = useState(''),
+      couponCode = _r[0],
+      setCouponCode = _r[1];
+    var _s = useState(''),
+      orderNote = _s[0],
+      setOrderNote = _s[1];
 
     var selectedVariation = useMemo(function () {
       return findVariation(selectedProduct, selectedAttributes);
     }, [selectedProduct, selectedAttributes]);
+
+    // Auto-dismiss feedback after 6 seconds.
+    useEffect(function () {
+      if (!feedback) {
+        return;
+      }
+      var timeout = window.setTimeout(function () {
+        setFeedback('');
+      }, 6000);
+      return function () {
+        window.clearTimeout(timeout);
+      };
+    }, [feedback]);
 
     useEffect(function () {
       setLoading(true);
       request('/bootstrap')
         .then(function (response) {
           setBootstrap(response);
-          setCart(response.cart || { items: [], itemCount: 0, totals: {}, notices: [] });
+          setCart(response.cart || { items: [], itemCount: 0, totals: {}, appliedCoupons: [], notices: [] });
         })
         .catch(function (error) {
           setFeedback(error.message || 'Failed to load Staff POS.');
@@ -260,17 +293,30 @@
     }, [selectedProductId]);
 
     function syncCart(nextCart) {
-      setCart(nextCart || { items: [], itemCount: 0, totals: {}, notices: [] });
+      setCart(nextCart || { items: [], itemCount: 0, totals: {}, appliedCoupons: [], notices: [] });
     }
 
     function handleCustomerDraftChange(key, value) {
       setCustomerDraft(function (current) {
-        return Object.assign({}, current, (function () {
-          var patch = {};
-          patch[key] = value;
-          return patch;
-        })());
+        var patch = {};
+        patch[key] = value;
+        return Object.assign({}, current, patch);
       });
+    }
+
+    function handleSelectCustomer(customer) {
+      setSelectedCustomer(customer);
+      setCustomerDraft({
+        first_name: customer.firstName || '',
+        last_name: customer.lastName || '',
+        email: customer.email || '',
+        phone: customer.phone || ''
+      });
+    }
+
+    function handleDeselectCustomer() {
+      setSelectedCustomer(null);
+      setCustomerDraft({ first_name: '', last_name: '', email: '', phone: '' });
     }
 
     function handleCreateCustomer() {
@@ -280,7 +326,7 @@
         data: customerDraft
       })
         .then(function (response) {
-          setSelectedCustomer(response.item);
+          handleSelectCustomer(response.item);
           setFeedback('Customer created and selected.');
           setCustomerQuery(response.item.email || response.item.name || '');
         })
@@ -294,11 +340,9 @@
 
     function handleAttributeChange(name, value) {
       setSelectedAttributes(function (current) {
-        return Object.assign({}, current, (function () {
-          var patch = {};
-          patch[name] = value;
-          return patch;
-        })());
+        var patch = {};
+        patch[name] = value;
+        return Object.assign({}, current, patch);
       });
     }
 
@@ -352,17 +396,64 @@
         });
     }
 
-    function buildBillingPayload() {
-      if (selectedCustomer) {
-        return {
-          first_name: customerDraft.first_name,
-          last_name: customerDraft.last_name,
-          email: selectedCustomer.email || customerDraft.email,
-          phone: selectedCustomer.phone || customerDraft.phone
-        };
+    function handleClearCart() {
+      if (!window.confirm('Clear the entire POS cart?')) {
+        return;
       }
+      setBusyAction('clear-cart');
+      request('/cart', { method: 'DELETE' })
+        .then(function (response) {
+          syncCart(response.cart);
+          setFeedback('Cart cleared.');
+        })
+        .catch(function (error) {
+          setFeedback(error.message || 'Cart could not be cleared.');
+        })
+        .finally(function () {
+          setBusyAction('');
+        });
+    }
 
-      return customerDraft;
+    function handleApplyCoupon() {
+      if (!couponCode) {
+        return;
+      }
+      setBusyAction('apply-coupon');
+      request('/cart/coupons', {
+        method: 'POST',
+        data: { code: couponCode }
+      })
+        .then(function (response) {
+          syncCart(response.cart);
+          setCouponCode('');
+          setFeedback('Coupon applied.');
+        })
+        .catch(function (error) {
+          setFeedback(error.message || 'Coupon could not be applied.');
+        })
+        .finally(function () {
+          setBusyAction('');
+        });
+    }
+
+    function handleRemoveCoupon(code) {
+      request('/cart/coupons/' + encodeURIComponent(code), { method: 'DELETE' })
+        .then(function (response) {
+          syncCart(response.cart);
+          setFeedback('Coupon removed.');
+        })
+        .catch(function (error) {
+          setFeedback(error.message || 'Coupon could not be removed.');
+        });
+    }
+
+    function buildBillingPayload() {
+      return {
+        first_name: customerDraft.first_name,
+        last_name: customerDraft.last_name,
+        email: selectedCustomer ? (selectedCustomer.email || customerDraft.email) : customerDraft.email,
+        phone: selectedCustomer ? (selectedCustomer.phone || customerDraft.phone) : customerDraft.phone
+      };
     }
 
     function maybeCopyLink(link) {
@@ -375,6 +466,12 @@
       });
     }
 
+    function handleCopyLink(link) {
+      maybeCopyLink(link).then(function () {
+        setFeedback('Payment link copied to clipboard.');
+      });
+    }
+
     function handleCreateOrder(mode, sendEmail) {
       setBusyAction(mode + (sendEmail ? '-send' : '-create'));
       request('/orders', {
@@ -384,21 +481,23 @@
           send_email: !!sendEmail,
           tender_type: tenderType,
           customer_id: selectedCustomer ? selectedCustomer.id : 0,
-          billing: buildBillingPayload()
+          billing: buildBillingPayload(),
+          note: orderNote
         }
       })
         .then(function (response) {
           syncCart(response.cart);
           setOrderResult(response.order);
+          setOrderNote('');
           if (response.order && response.order.paymentUrl) {
             maybeCopyLink(response.order.paymentUrl);
           }
           if (mode === 'manual_paid') {
-            setFeedback('Order created and marked paid.');
+            setFeedback('Order #' + response.order.number + ' created and marked paid.');
           } else if (sendEmail) {
-            setFeedback('Order created and WooCommerce customer invoice email triggered. Payment link copied when possible.');
+            setFeedback('Order #' + response.order.number + ' created. Invoice email sent. Payment link copied.');
           } else {
-            setFeedback('Pending order created. Payment link copied when possible.');
+            setFeedback('Order #' + response.order.number + ' created. Payment link copied.');
           }
         })
         .catch(function (error) {
@@ -409,28 +508,87 @@
         });
     }
 
+    function handleNewTransaction() {
+      setOrderResult(null);
+      setSelectedCustomer(null);
+      setSelectedProductId(null);
+      setSelectedProduct(null);
+      setSelectedAttributes({});
+      setQuantity(1);
+      setCustomerQuery('');
+      setCustomerDraft({ first_name: '', last_name: '', email: '', phone: '' });
+      setOrderNote('');
+      setCouponCode('');
+      setFeedback('');
+    }
+
+    // Tender type options: from bootstrap when available, else sensible defaults.
+    var tenderOptions = bootstrap && bootstrap.manualTenderTypes && bootstrap.manualTenderTypes.length
+      ? bootstrap.manualTenderTypes
+      : [{ value: 'cash', label: 'Cash' }, { value: 'manual', label: 'Manual' }];
+
+    var hasCartItems = cart && cart.items && cart.items.length > 0;
+
     return h(
       'div',
       { className: 'wc-staff-pos-app' },
+
+      /* ---- Header ---- */
       h(
         'header',
         { className: 'wc-staff-pos-header' },
-        h('div', null, h('h1', null, config.title || 'Staff POS'), bootstrap && bootstrap.currentUser ? h('p', null, 'Cashier: ' + bootstrap.currentUser.name) : null),
-        h('div', { className: 'wc-staff-pos-status' }, cart && cart.itemCount ? cart.itemCount + ' item(s)' : 'Empty cart')
+        h(
+          'div',
+          null,
+          h('h1', null, config.title || 'Staff POS'),
+          bootstrap && bootstrap.currentUser
+            ? h('p', null, 'Cashier: ' + bootstrap.currentUser.name)
+            : null
+        ),
+        h(
+          'div',
+          { className: 'wc-staff-pos-status' },
+          cart && cart.itemCount ? cart.itemCount + ' item(s) in cart' : 'Empty cart'
+        )
       ),
-      feedback ? h('div', { className: 'wc-staff-pos-banner' }, feedback) : null,
-      cart && cart.notices && cart.notices.length ? h('div', { className: 'wc-staff-pos-notices' }, cart.notices.map(renderNotice)) : null,
+
+      /* ---- Feedback banner ---- */
+      feedback
+        ? h(
+            'div',
+            { className: 'wc-staff-pos-banner' },
+            feedback,
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'wc-staff-pos-banner-close',
+                onClick: function () { setFeedback(''); }
+              },
+              '×'
+            )
+          )
+        : null,
+
+      /* ---- Cart notices ---- */
+      cart && cart.notices && cart.notices.length
+        ? h('div', { className: 'wc-staff-pos-notices' }, cart.notices.map(renderNotice))
+        : null,
+
+      /* ---- 3-column grid ---- */
       h(
         'div',
         { className: 'wc-staff-pos-grid' },
+
+        /* ========== CUSTOMERS PANEL ========== */
         h(
           'section',
           { className: 'wc-staff-pos-panel' },
-          h('h2', null, 'Customers'),
+          h('h2', null, 'Customer'),
           h('input', {
             className: 'wc-staff-pos-search',
             type: 'search',
-            placeholder: 'Search customers by name, email, or phone',
+            placeholder: 'Search by name, email, or phone',
             value: customerQuery,
             onChange: function (event) {
               setCustomerQuery(event.target.value);
@@ -445,15 +603,12 @@
                 {
                   key: 'customer-' + customer.id,
                   type: 'button',
-                  className: classNames('wc-staff-pos-list-item', selectedCustomer && selectedCustomer.id === customer.id && 'is-active'),
+                  className: classNames(
+                    'wc-staff-pos-list-item',
+                    selectedCustomer && selectedCustomer.id === customer.id && 'is-active'
+                  ),
                   onClick: function () {
-                    setSelectedCustomer(customer);
-                    setCustomerDraft(function (current) {
-                      return Object.assign({}, current, {
-                        email: customer.email || current.email,
-                        phone: customer.phone || current.phone
-                      });
-                    });
+                    handleSelectCustomer(customer);
                   }
                 },
                 h('strong', null, customer.name),
@@ -466,7 +621,20 @@
             ? h(
                 'div',
                 { className: 'wc-staff-pos-selected-customer' },
-                h('strong', null, 'Selected customer'),
+                h(
+                  'div',
+                  { className: 'wc-staff-pos-selected-customer-header' },
+                  h('strong', null, 'Selected customer'),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'button button-link-delete wc-staff-pos-deselect-btn',
+                      onClick: handleDeselectCustomer
+                    },
+                    'Deselect'
+                  )
+                ),
                 h('p', null, selectedCustomer.name),
                 h('p', null, selectedCustomer.email || 'No email'),
                 h('p', null, selectedCustomer.phone || 'No phone')
@@ -492,6 +660,8 @@
             busyAction === 'create-customer' ? 'Creating...' : 'Create customer'
           )
         ),
+
+        /* ========== PRODUCTS PANEL ========== */
         h(
           'section',
           { className: 'wc-staff-pos-panel' },
@@ -499,7 +669,7 @@
           h('input', {
             className: 'wc-staff-pos-search',
             type: 'search',
-            placeholder: 'Search products',
+            placeholder: 'Search by name or SKU',
             value: productQuery,
             onChange: function (event) {
               setProductQuery(event.target.value);
@@ -522,10 +692,24 @@
                 'div',
                 { className: 'wc-staff-pos-product-detail' },
                 h('h3', null, selectedProduct.name),
+                selectedProduct.sku
+                  ? h('p', { className: 'wc-staff-pos-meta' }, 'SKU: ' + selectedProduct.sku)
+                  : null,
                 h('p', { className: 'wc-staff-pos-price' }, htmlNode(selectedProduct.priceHtml || '')),
-                selectedProduct.isSupported
-                  ? null
-                  : h('p', { className: 'wc-staff-pos-warning' }, selectedProduct.unsupportedReason || config.strings.unsupportedProduct),
+                selectedProduct.stockQuantity !== null && selectedProduct.stockQuantity !== undefined
+                  ? h(
+                      'p',
+                      { className: classNames('wc-staff-pos-meta', !selectedProduct.inStock && 'wc-staff-pos-out-of-stock-text') },
+                      selectedProduct.inStock
+                        ? 'In stock: ' + selectedProduct.stockQuantity
+                        : 'Out of stock'
+                    )
+                  : !selectedProduct.inStock
+                    ? h('p', { className: 'wc-staff-pos-out-of-stock-text wc-staff-pos-meta' }, 'Out of stock')
+                    : null,
+                !selectedProduct.isSupported
+                  ? h('p', { className: 'wc-staff-pos-warning' }, selectedProduct.unsupportedReason || config.strings.unsupportedProduct)
+                  : null,
                 selectedProduct.attributes && selectedProduct.attributes.length
                   ? selectedProduct.attributes.map(function (attribute) {
                       return h(
@@ -549,7 +733,7 @@
                     })
                   : null,
                 selectedVariation
-                  ? h('p', { className: 'wc-staff-pos-meta' }, 'Variation ready: #' + selectedVariation.id)
+                  ? h('p', { className: 'wc-staff-pos-meta' }, 'Variation ready \u2013 #' + selectedVariation.id + ' \u00b7 ' + (selectedVariation.priceHtml ? '' : ''))
                   : selectedProduct.type === 'variable'
                     ? h('p', { className: 'wc-staff-pos-meta' }, 'Choose all options to add this product.')
                     : null,
@@ -570,7 +754,11 @@
                   {
                     type: 'button',
                     className: 'button button-primary',
-                    disabled: !selectedProduct.isSupported || busyAction === 'add-to-cart' || (selectedProduct.type === 'variable' && !selectedVariation),
+                    disabled:
+                      !selectedProduct.isSupported ||
+                      !selectedProduct.inStock ||
+                      busyAction === 'add-to-cart' ||
+                      (selectedProduct.type === 'variable' && !selectedVariation),
                     onClick: handleAddToCart
                   },
                   busyAction === 'add-to-cart' ? 'Adding...' : 'Add to cart'
@@ -578,11 +766,29 @@
               )
             : h('p', { className: 'wc-staff-pos-empty-state' }, loading ? 'Loading...' : 'Select a product to configure it.')
         ),
+
+        /* ========== CART PANEL ========== */
         h(
           'section',
           { className: 'wc-staff-pos-panel' },
-          h('h2', null, 'Cart'),
-          cart && cart.items && cart.items.length
+          h(
+            'div',
+            { className: 'wc-staff-pos-cart-header' },
+            h('h2', null, 'Cart'),
+            hasCartItems
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'button button-link-delete',
+                    disabled: !!busyAction,
+                    onClick: handleClearCart
+                  },
+                  busyAction === 'clear-cart' ? 'Clearing...' : 'Clear cart'
+                )
+              : null
+          ),
+          hasCartItems
             ? h(
                 'div',
                 { className: 'wc-staff-pos-cart-list' },
@@ -596,6 +802,59 @@
                 })
               )
             : h('p', { className: 'wc-staff-pos-empty-state' }, 'No items in the POS cart yet.'),
+
+          /* Coupon row */
+          h(
+            'div',
+            { className: 'wc-staff-pos-coupon-row' },
+            h('input', {
+              className: 'wc-staff-pos-coupon-input',
+              type: 'text',
+              placeholder: 'Coupon code',
+              value: couponCode,
+              onChange: function (event) { setCouponCode(event.target.value); },
+              onKeyDown: function (event) {
+                if (event.key === 'Enter') { handleApplyCoupon(); }
+              }
+            }),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'button button-secondary',
+                disabled: !couponCode || busyAction === 'apply-coupon',
+                onClick: handleApplyCoupon
+              },
+              busyAction === 'apply-coupon' ? 'Applying...' : 'Apply'
+            )
+          ),
+
+          /* Applied coupons */
+          cart.appliedCoupons && cart.appliedCoupons.length
+            ? h(
+                'div',
+                { className: 'wc-staff-pos-applied-coupons' },
+                cart.appliedCoupons.map(function (code) {
+                  return h(
+                    'span',
+                    { key: 'coupon-' + code, className: 'wc-staff-pos-coupon-chip' },
+                    code,
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'wc-staff-pos-coupon-remove',
+                        title: 'Remove coupon',
+                        onClick: function () { handleRemoveCoupon(code); }
+                      },
+                      '\u00d7'
+                    )
+                  );
+                })
+              )
+            : null,
+
+          /* Totals */
           h(
             'div',
             { className: 'wc-staff-pos-totals' },
@@ -604,9 +863,11 @@
             h('div', null, h('span', null, 'Tax'), htmlNode((cart.totals && cart.totals.taxHtml) || '')),
             h('div', { className: 'is-total' }, h('span', null, 'Total'), htmlNode((cart.totals && cart.totals.totalHtml) || ''))
           ),
+
+          /* Tender type + Order note */
           h(
             Field,
-            { label: 'Manual tender type' },
+            { label: 'Payment method' },
             h(
               'select',
               {
@@ -615,12 +876,24 @@
                   setTenderType(event.target.value);
                 }
               },
-              [
-                h('option', { key: 'cash', value: 'cash' }, 'Cash'),
-                h('option', { key: 'manual', value: 'manual' }, 'Manual')
-              ]
+              tenderOptions.map(function (option) {
+                return h('option', { key: option.value, value: option.value }, option.label);
+              })
             )
           ),
+          h(
+            Field,
+            { label: 'Staff note (optional)' },
+            h('textarea', {
+              className: 'wc-staff-pos-textarea',
+              rows: 2,
+              placeholder: 'Internal note attached to the order\u2026',
+              value: orderNote,
+              onChange: function (event) { setOrderNote(event.target.value); }
+            })
+          ),
+
+          /* Action buttons */
           h(
             'div',
             { className: 'wc-staff-pos-actions' },
@@ -629,7 +902,7 @@
               {
                 type: 'button',
                 className: 'button',
-                disabled: !cart.items || !cart.items.length || !!busyAction,
+                disabled: !hasCartItems || !!busyAction,
                 onClick: function () {
                   handleCreateOrder('payment_link', false);
                 }
@@ -641,7 +914,7 @@
               {
                 type: 'button',
                 className: 'button button-secondary',
-                disabled: !cart.items || !cart.items.length || !!busyAction,
+                disabled: !hasCartItems || !!busyAction,
                 onClick: function () {
                   handleCreateOrder('payment_link', true);
                 }
@@ -653,7 +926,7 @@
               {
                 type: 'button',
                 className: 'button button-primary',
-                disabled: !cart.items || !cart.items.length || !!busyAction,
+                disabled: !hasCartItems || !!busyAction,
                 onClick: function () {
                   handleCreateOrder('manual_paid', false);
                 }
@@ -661,14 +934,46 @@
               'Mark paid'
             )
           ),
+
+          /* Order result */
           orderResult
             ? h(
                 'div',
                 { className: 'wc-staff-pos-order-result' },
-                h('strong', null, 'Last order #' + orderResult.number),
-                h('p', null, 'Status: ' + orderResult.status),
-                orderResult.paymentUrl ? h('p', null, h('a', { href: orderResult.paymentUrl, target: '_blank', rel: 'noreferrer' }, 'Open payment link')) : null,
-                orderResult.editUrl ? h('p', null, h('a', { href: orderResult.editUrl }, 'Open order in WooCommerce')) : null
+                h(
+                  'div',
+                  { className: 'wc-staff-pos-order-result-header' },
+                  h('strong', null, 'Order #' + orderResult.number),
+                  h('span', { className: 'wc-staff-pos-badge wc-staff-pos-status-badge' }, orderResult.status)
+                ),
+                orderResult.paymentUrl
+                  ? h(
+                      'div',
+                      { className: 'wc-staff-pos-order-result-links' },
+                      h('a', { href: orderResult.paymentUrl, target: '_blank', rel: 'noreferrer' }, 'Open payment link'),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'button button-secondary wc-staff-pos-copy-btn',
+                          onClick: function () { handleCopyLink(orderResult.paymentUrl); }
+                        },
+                        'Copy link'
+                      )
+                    )
+                  : null,
+                orderResult.editUrl
+                  ? h('div', null, h('a', { href: orderResult.editUrl }, 'Open in WooCommerce'))
+                  : null,
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'button button-primary wc-staff-pos-new-transaction-btn',
+                    onClick: handleNewTransaction
+                  },
+                  'New transaction'
+                )
               )
             : null
         )

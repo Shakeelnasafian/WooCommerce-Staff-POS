@@ -52,7 +52,28 @@ final class ProductsController extends Controller
 		$query = sanitize_text_field((string) $request->get_param('q'));
 		$limit = max(1, min(50, (int) ($request->get_param('limit') ?: 20)));
 
-		$posts = get_posts(
+		// Search by SKU first (exact/prefix match), then by name/title.
+		$sku_ids = [];
+
+		if ('' !== $query) {
+			$sku_ids = get_posts(
+				[
+					'post_type'      => 'product',
+					'post_status'    => 'publish',
+					'posts_per_page' => $limit,
+					'fields'         => 'ids',
+					'meta_query'     => [
+						[
+							'key'     => '_sku',
+							'value'   => $query,
+							'compare' => 'LIKE',
+						],
+					],
+				]
+			);
+		}
+
+		$name_ids = get_posts(
 			[
 				'post_type'      => 'product',
 				'post_status'    => 'publish',
@@ -64,9 +85,12 @@ final class ProductsController extends Controller
 			]
 		);
 
+		// SKU matches take priority; deduplicate and respect the limit.
+		$ids   = array_values(array_unique(array_merge((array) $sku_ids, (array) $name_ids)));
+		$ids   = array_slice($ids, 0, $limit);
 		$items = [];
 
-		foreach ($posts as $product_id) {
+		foreach ($ids as $product_id) {
 			$product = wc_get_product($product_id);
 
 			if (! $product instanceof WC_Product) {
@@ -97,19 +121,20 @@ final class ProductsController extends Controller
 	private function map_product_summary(WC_Product $product): array
 	{
 		return [
-			'id'          => $product->get_id(),
-			'name'        => $product->get_name(),
-			'type'        => $product->get_type(),
-			'sku'         => $product->get_sku(),
-			'price'       => (float) wc_get_price_to_display($product),
-			'priceHtml'   => $product->get_price_html(),
-			'stockStatus' => $product->get_stock_status(),
-			'manageStock' => $product->managing_stock(),
-			'inStock'     => $product->is_in_stock(),
-			'isSupported' => $this->product_adapter->supports($product),
-			'hasOptions'  => $product->is_type('variable'),
-			'image'       => wp_get_attachment_image_url((int) $product->get_image_id(), 'thumbnail') ?: '',
-			'description' => wp_strip_all_tags($product->get_short_description()),
+			'id'            => $product->get_id(),
+			'name'          => $product->get_name(),
+			'type'          => $product->get_type(),
+			'sku'           => $product->get_sku(),
+			'price'         => (float) wc_get_price_to_display($product),
+			'priceHtml'     => $product->get_price_html(),
+			'stockStatus'   => $product->get_stock_status(),
+			'stockQuantity' => $product->managing_stock() ? $product->get_stock_quantity() : null,
+			'manageStock'   => $product->managing_stock(),
+			'inStock'       => $product->is_in_stock(),
+			'isSupported'   => $this->product_adapter->supports($product),
+			'hasOptions'    => $product->is_type('variable'),
+			'image'         => wp_get_attachment_image_url((int) $product->get_image_id(), 'thumbnail') ?: '',
+			'description'   => wp_strip_all_tags($product->get_short_description()),
 		];
 	}
 
