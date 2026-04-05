@@ -70,6 +70,18 @@
 
   function CartItem(props) {
     var item = props.item;
+    var _lq = useState(item.quantity), localQty = _lq[0], setLocalQty = _lq[1];
+
+    // Keep local qty in sync when the server-side cart updates the item.
+    useEffect(function () { setLocalQty(item.quantity); }, [item.quantity]);
+
+    function commitQty() {
+      var next = Number(localQty);
+      if (!isNaN(next) && next !== item.quantity) {
+        props.onQuantityChange(item.key, next);
+      }
+    }
+
     return h('div', { className: 'wc-staff-pos-cart-item' },
       h('div', { className: 'wc-staff-pos-cart-item-main' },
         h('strong', null, item.name),
@@ -84,8 +96,10 @@
       ),
       h('div', { className: 'wc-staff-pos-cart-item-controls' },
         h('input', {
-          type: 'number', min: 0, value: item.quantity,
-          onChange: function (e) { props.onQuantityChange(item.key, e.target.value); }
+          type: 'number', min: 0, value: localQty,
+          onChange: function (e) { setLocalQty(e.target.value); },
+          onBlur: commitQty,
+          onKeyDown: function (e) { if (e.key === 'Enter') { e.target.blur(); } }
         }),
         h('span', { className: 'wc-staff-pos-price' }, htmlNode(item.lineTotalHtml || '')),
         h('button', { type: 'button', className: 'button button-link-delete', onClick: function () { props.onRemove(item.key); } }, 'Remove')
@@ -396,11 +410,13 @@
     }
 
     function buildBillingPayload() {
+      // customerDraft is already pre-populated from the selected customer on selection,
+      // so edited values always take precedence regardless of guest/account mode.
       return {
         first_name: customerDraft.first_name,
         last_name: customerDraft.last_name,
-        email: selectedCustomer ? (selectedCustomer.email || customerDraft.email) : customerDraft.email,
-        phone: selectedCustomer ? (selectedCustomer.phone || customerDraft.phone) : customerDraft.phone
+        email: customerDraft.email,
+        phone: customerDraft.phone
       };
     }
 
@@ -490,7 +506,7 @@
       feedback
         ? h('div', { className: 'wc-staff-pos-banner' },
             feedback,
-            h('button', { type: 'button', className: 'wc-staff-pos-banner-close', onClick: function () { setFeedback(''); } }, '\u00d7')
+            h('button', { type: 'button', className: 'wc-staff-pos-banner-close', 'aria-label': 'Dismiss message', onClick: function () { setFeedback(''); } }, '\u00d7')
           )
         : null,
 
@@ -699,7 +715,7 @@
                       h('button', {
                         type: 'button',
                         className: 'button button-primary',
-                        disabled: !selectedProduct.isSupported || !selectedProduct.inStock || busyAction === 'add-to-cart' || (selectedProduct.type === 'variable' && !selectedVariation) || (priceOverride && !customPrice),
+                        disabled: !selectedProduct.isSupported || !selectedProduct.inStock || busyAction === 'add-to-cart' || (selectedProduct.type === 'variable' && !selectedVariation) || (selectedVariation && !selectedVariation.inStock) || (priceOverride && !customPrice),
                         onClick: handleAddToCart
                       }, busyAction === 'add-to-cart' ? 'Adding\u2026' : 'Add to cart')
                     )
@@ -760,7 +776,7 @@
                 cart.appliedCoupons.map(function (code) {
                   return h('span', { key: 'coupon-' + code, className: 'wc-staff-pos-coupon-chip' },
                     code,
-                    h('button', { type: 'button', className: 'wc-staff-pos-coupon-remove', title: 'Remove', onClick: function () { handleRemoveCoupon(code); } }, '\u00d7')
+                    h('button', { type: 'button', className: 'wc-staff-pos-coupon-remove', 'aria-label': 'Remove coupon ' + code, onClick: function () { handleRemoveCoupon(code); } }, '\u00d7')
                   );
                 })
               )

@@ -67,6 +67,17 @@ final class OrderService
 
 		$this->apply_billing_to_order($order, $billing);
 
+		$note = sanitize_textarea_field((string) ($payload['note'] ?? ''));
+
+		if ('' !== $note) {
+			$order->add_order_note($note, 0, true);
+		}
+
+		// Finalize order data before triggering any side effects (emails, payment
+		// state changes) so that all side-effect hooks operate on a complete order.
+		$order->calculate_totals(true);
+		$order->save();
+
 		if ('payment_link' === $mode) {
 			$order->update_status('pending', __('Payment link prepared by Staff POS.', 'wc-staff-pos'));
 			$order->update_meta_data('_wc_staff_pos_payment_link_generated_at', current_time('mysql', true));
@@ -74,6 +85,7 @@ final class OrderService
 			if (! empty($payload['send_email'])) {
 				$this->send_customer_invoice($order);
 				$order->update_meta_data('_wc_staff_pos_payment_link_sent_at', current_time('mysql', true));
+				$order->save();
 			}
 		}
 
@@ -85,14 +97,6 @@ final class OrderService
 			$order->payment_complete();
 		}
 
-		$note = sanitize_text_field((string) ($payload['note'] ?? ''));
-
-		if ('' !== $note) {
-			$order->add_order_note($note, 0, true);
-		}
-
-		$order->calculate_totals(true);
-		$order->save();
 		WC()->cart->empty_cart();
 
 		return [

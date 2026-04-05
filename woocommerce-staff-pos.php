@@ -24,8 +24,10 @@ add_action(
 	'before_woocommerce_init',
 	static function (): void {
 		if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
+			// This plugin is compatible with HPOS (custom order tables).
 			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
-			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('cart_checkout_blocks', __FILE__, false);
+			// No cart_checkout_blocks declaration needed — this plugin does not
+			// extend the storefront Cart or Checkout block flow at all.
 		}
 	}
 );

@@ -69,11 +69,12 @@ final class ProductsController extends Controller
 			];
 		}
 
-		// Search by SKU first (LIKE match), then by title/content.
+		// Search by SKU first (LIKE match on both products and variations), then by title/content.
 		$sku_ids = [];
 
 		if ('' !== $query) {
-			$sku_ids = get_posts(
+			// Parent products with matching SKU.
+			$sku_ids = (array) get_posts(
 				array_merge(
 					$base_args,
 					[
@@ -88,6 +89,31 @@ final class ProductsController extends Controller
 					]
 				)
 			);
+
+			// Variations with matching SKU — map each back to its parent product.
+			$variation_ids = (array) get_posts(
+				[
+					'post_type'      => 'product_variation',
+					'post_status'    => 'publish',
+					'fields'         => 'ids',
+					'posts_per_page' => $limit,
+					'meta_query'     => [
+						[
+							'key'     => '_sku',
+							'value'   => $query,
+							'compare' => 'LIKE',
+						],
+					],
+				]
+			);
+
+			foreach ($variation_ids as $variation_id) {
+				$parent_id = wp_get_post_parent_id((int) $variation_id);
+
+				if ($parent_id > 0 && 'publish' === get_post_status($parent_id)) {
+					$sku_ids[] = $parent_id;
+				}
+			}
 		}
 
 		$name_ids = get_posts(
