@@ -110,9 +110,16 @@ final class ProductsController extends Controller
 			foreach ($variation_ids as $variation_id) {
 				$parent_id = wp_get_post_parent_id((int) $variation_id);
 
-				if ($parent_id > 0 && 'publish' === get_post_status($parent_id)) {
-					$sku_ids[] = $parent_id;
+				if ($parent_id <= 0 || 'publish' !== get_post_status($parent_id)) {
+					continue;
 				}
+
+				// If a category filter is active, skip parent products outside that category.
+				if ($category > 0 && ! has_term($category, 'product_cat', $parent_id)) {
+					continue;
+				}
+
+				$sku_ids[] = $parent_id;
 			}
 		}
 

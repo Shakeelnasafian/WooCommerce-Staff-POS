@@ -79,8 +79,10 @@ final class OrderService
 		$order->save();
 
 		if ('payment_link' === $mode) {
-			$order->update_status('pending', __('Payment link prepared by Staff POS.', 'wc-staff-pos'));
+			// Set meta before update_status() so the internal save persists it even
+			// when send_email is false and there is no subsequent explicit save().
 			$order->update_meta_data('_wc_staff_pos_payment_link_generated_at', current_time('mysql', true));
+			$order->update_status('pending', __('Payment link prepared by Staff POS.', 'wc-staff-pos'));
 
 			if (! empty($payload['send_email'])) {
 				$this->send_customer_invoice($order);
@@ -136,9 +138,14 @@ final class OrderService
 		try {
 			$order = wc_create_order(['customer_id' => $customer_id, 'created_via' => 'staff-pos']);
 		} catch (\Throwable $throwable) {
+			wc_get_logger()->error(
+				'Staff POS order creation failed: ' . $throwable->getMessage(),
+				['source' => 'wc-staff-pos']
+			);
+
 			return new WP_Error(
 				'wc_staff_pos_order_creation_exception',
-				$throwable->getMessage(),
+				__('The order could not be created. Please try again.', 'wc-staff-pos'),
 				['status' => 500]
 			);
 		}
@@ -165,9 +172,24 @@ final class OrderService
 			);
 		}
 
-		// Apply coupons.
+		// Apply coupons — roll back and abort if any coupon is rejected.
 		foreach (WC()->cart->get_applied_coupons() as $code) {
-			$order->apply_coupon($code);
+			$result = $order->apply_coupon($code);
+
+			if (is_wp_error($result)) {
+				$order->delete(true);
+
+				return new WP_Error(
+					'wc_staff_pos_coupon_error',
+					sprintf(
+					/* translators: %1$s: coupon code, %2$s: error message */
+						__('Coupon "%1$s" could not be applied: %2$s', 'wc-staff-pos'),
+						esc_html($code),
+						$result->get_error_message()
+					),
+					['status' => 422]
+				);
+			}
 		}
 
 		// Add cart fees (e.g. surcharges added by third-party plugins).
