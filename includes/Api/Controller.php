@@ -17,7 +17,7 @@ abstract class Controller
 	{
 		unset($request);
 
-		if (current_user_can('manage_woocommerce')) {
+		if (current_user_can('wc_staff_pos')) {
 			return true;
 		}
 

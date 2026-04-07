@@ -104,6 +104,7 @@ final class PosCartContext
 				'lineTotal'        => (float) ($item['line_total'] ?? 0),
 				'lineSubtotalHtml' => wc_price((float) ($item['line_subtotal'] ?? 0)),
 				'lineTotalHtml'    => wc_price((float) ($item['line_total'] ?? 0)),
+				'customPrice'      => isset($item['_wc_pos_custom_price']) ? (float) $item['_wc_pos_custom_price'] : null,
 				'attributes'       => $this->format_attributes((array) ($item['variation'] ?? [])),
 			];
 		}
@@ -113,6 +114,7 @@ final class PosCartContext
 			'itemCount'      => WC()->cart->get_cart_contents_count(),
 			'coupons'        => $this->get_applied_coupons(),
 			'supportedTypes' => $this->product_adapter->get_supported_types(),
+			'appliedCoupons' => WC()->cart->get_applied_coupons(),
 			'totals'         => [
 				'currencyCode' => get_woocommerce_currency(),
 				'subtotal'     => (float) WC()->cart->get_subtotal(),

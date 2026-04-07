@@ -49,24 +49,97 @@ final class ProductsController extends Controller
 
 	public function get_items(WP_REST_Request $request): array
 	{
-		$query = sanitize_text_field((string) $request->get_param('q'));
-		$limit = max(1, min(50, (int) ($request->get_param('limit') ?: 20)));
+		$query    = sanitize_text_field((string) $request->get_param('q'));
+		$limit    = max(1, min(50, (int) ($request->get_param('limit') ?: 20)));
+		$category = absint($request->get_param('category'));
 
-		$posts = get_posts(
-			[
-				'post_type'      => 'product',
-				'post_status'    => 'publish',
-				'posts_per_page' => $limit,
-				's'              => $query,
-				'orderby'        => 'date',
-				'order'          => 'DESC',
-				'fields'         => 'ids',
-			]
+		$base_args = [
+			'post_type'   => 'product',
+			'post_status' => 'publish',
+			'fields'      => 'ids',
+		];
+
+		if ($category > 0) {
+			$base_args['tax_query'] = [
+				[
+					'taxonomy' => 'product_cat',
+					'field'    => 'term_id',
+					'terms'    => $category,
+				],
+			];
+		}
+
+		// Search by SKU first (LIKE match on both products and variations), then by title/content.
+		$sku_ids = [];
+
+		if ('' !== $query) {
+			// Parent products with matching SKU.
+			$sku_ids = (array) get_posts(
+				array_merge(
+					$base_args,
+					[
+						'posts_per_page' => $limit,
+						'meta_query'     => [
+							[
+								'key'     => '_sku',
+								'value'   => $query,
+								'compare' => 'LIKE',
+							],
+						],
+					]
+				)
+			);
+
+			// Variations with matching SKU — map each back to its parent product.
+			$variation_ids = (array) get_posts(
+				[
+					'post_type'      => 'product_variation',
+					'post_status'    => 'publish',
+					'fields'         => 'ids',
+					'posts_per_page' => $limit,
+					'meta_query'     => [
+						[
+							'key'     => '_sku',
+							'value'   => $query,
+							'compare' => 'LIKE',
+						],
+					],
+				]
+			);
+
+			foreach ($variation_ids as $variation_id) {
+				$parent_id = wp_get_post_parent_id((int) $variation_id);
+
+				if ($parent_id <= 0 || 'publish' !== get_post_status($parent_id)) {
+					continue;
+				}
+
+				// If a category filter is active, skip parent products outside that category.
+				if ($category > 0 && ! has_term($category, 'product_cat', $parent_id)) {
+					continue;
+				}
+
+				$sku_ids[] = $parent_id;
+			}
+		}
+
+		$name_ids = get_posts(
+			array_merge(
+				$base_args,
+				[
+					'posts_per_page' => $limit,
+					's'              => $query,
+					'orderby'        => 'date',
+					'order'          => 'DESC',
+				]
+			)
 		);
 
+		// SKU matches take priority; deduplicate and respect the limit.
+		$ids   = array_slice(array_values(array_unique(array_merge((array) $sku_ids, (array) $name_ids))), 0, $limit);
 		$items = [];
 
-		foreach ($posts as $product_id) {
+		foreach ($ids as $product_id) {
 			$product = wc_get_product($product_id);
 
 			if (! $product instanceof WC_Product) {
@@ -97,19 +170,20 @@ final class ProductsController extends Controller
 	private function map_product_summary(WC_Product $product): array
 	{
 		return [
-			'id'          => $product->get_id(),
-			'name'        => $product->get_name(),
-			'type'        => $product->get_type(),
-			'sku'         => $product->get_sku(),
-			'price'       => (float) wc_get_price_to_display($product),
-			'priceHtml'   => $product->get_price_html(),
-			'stockStatus' => $product->get_stock_status(),
-			'manageStock' => $product->managing_stock(),
-			'inStock'     => $product->is_in_stock(),
-			'isSupported' => $this->product_adapter->supports($product),
-			'hasOptions'  => $product->is_type('variable'),
-			'image'       => wp_get_attachment_image_url((int) $product->get_image_id(), 'thumbnail') ?: '',
-			'description' => wp_strip_all_tags($product->get_short_description()),
+			'id'            => $product->get_id(),
+			'name'          => $product->get_name(),
+			'type'          => $product->get_type(),
+			'sku'           => $product->get_sku(),
+			'price'         => (float) wc_get_price_to_display($product),
+			'priceHtml'     => $product->get_price_html(),
+			'stockStatus'   => $product->get_stock_status(),
+			'stockQuantity' => $product->managing_stock() ? $product->get_stock_quantity() : null,
+			'manageStock'   => $product->managing_stock(),
+			'inStock'       => $product->is_in_stock(),
+			'isSupported'   => $this->product_adapter->supports($product),
+			'hasOptions'    => $product->is_type('variable'),
+			'image'         => wp_get_attachment_image_url((int) $product->get_image_id(), 'thumbnail') ?: '',
+			'description'   => wp_strip_all_tags($product->get_short_description()),
 		];
 	}
 

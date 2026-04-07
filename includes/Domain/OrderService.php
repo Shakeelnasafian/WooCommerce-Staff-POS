@@ -7,6 +7,7 @@ namespace WCStaffPOS\Domain;
 use WC_Customer;
 use WC_Email_Customer_Invoice;
 use WC_Order;
+use WC_Order_Item_Fee;
 use WCStaffPOS\Domain\Adapters\ManualTenderRecorderInterface;
 use WP_Error;
 
@@ -53,60 +54,40 @@ final class OrderService
 			);
 		}
 
-		$checkout_data = array_merge(
-			$billing,
-			[
-				'createaccount'             => false,
-				'ship_to_different_address' => false,
-			]
-		);
+		// Build the order directly from the cart, bypassing WC checkout hooks/validation.
+		$order = $this->build_order_from_cart($customer_id);
 
-		if ('manual_paid' === $mode) {
-			$checkout_data['payment_method']       = 'staff_pos_manual';
-			$checkout_data['payment_method_title'] = __('Staff POS Manual Payment', 'wc-staff-pos');
-		}
-
-		try {
-			$order_id = WC()->checkout()->create_order($checkout_data);
-		} catch (\Throwable $throwable) {
-			return new WP_Error(
-				'wc_staff_pos_order_creation_exception',
-				$throwable->getMessage(),
-				['status' => 500]
-			);
-		}
-
-		if (is_wp_error($order_id)) {
-			return $order_id;
-		}
-
-		$order = wc_get_order($order_id);
-
-		if (! $order instanceof WC_Order) {
-			return new WP_Error(
-				'wc_staff_pos_order_not_found',
-				__('Order could not be loaded after creation.', 'wc-staff-pos'),
-				['status' => 500]
-			);
+		if (is_wp_error($order)) {
+			return $order;
 		}
 
 		$order->set_created_via('staff-pos');
 		$order->update_meta_data('_wc_staff_pos_source', 'staff_pos');
 		$order->update_meta_data('_wc_staff_pos_cashier_user_id', get_current_user_id());
 
-		if ($customer_id > 0) {
-			$order->set_customer_id($customer_id);
-		}
-
 		$this->apply_billing_to_order($order, $billing);
 
+		$note = sanitize_textarea_field((string) ($payload['note'] ?? ''));
+
+		if ('' !== $note) {
+			$order->add_order_note($note, 0, true);
+		}
+
+		// Finalize order data before triggering any side effects (emails, payment
+		// state changes) so that all side-effect hooks operate on a complete order.
+		$order->calculate_totals(true);
+		$order->save();
+
 		if ('payment_link' === $mode) {
-			$order->update_status('pending', __('Payment link prepared by Staff POS.', 'wc-staff-pos'));
+			// Set meta before update_status() so the internal save persists it even
+			// when send_email is false and there is no subsequent explicit save().
 			$order->update_meta_data('_wc_staff_pos_payment_link_generated_at', current_time('mysql', true));
+			$order->update_status('pending', __('Payment link prepared by Staff POS.', 'wc-staff-pos'));
 
 			if (! empty($payload['send_email'])) {
 				$this->send_customer_invoice($order);
 				$order->update_meta_data('_wc_staff_pos_payment_link_sent_at', current_time('mysql', true));
+				$order->save();
 			}
 		}
 
@@ -118,8 +99,6 @@ final class OrderService
 			$order->payment_complete();
 		}
 
-		$order->calculate_totals(true);
-		$order->save();
 		WC()->cart->empty_cart();
 
 		return [
@@ -127,14 +106,14 @@ final class OrderService
 				'id'         => $order->get_id(),
 				'number'     => $order->get_order_number(),
 				'status'     => $order->get_status(),
-				'editUrl'    => admin_url('post.php?post=' . $order->get_id() . '&action=edit'),
+				'editUrl'    => $order->get_edit_order_url(),
 				'paymentUrl' => $order->needs_payment() ? $order->get_checkout_payment_url() : '',
 			],
 			'cart'  => [
-				'items'     => [],
-				'itemCount' => 0,
-				'coupons'   => [],
-				'totals'    => [
+				'items'          => [],
+				'itemCount'      => 0,
+				'appliedCoupons' => [],
+				'totals'         => [
 					'currencyCode' => get_woocommerce_currency(),
 					'subtotal'     => 0,
 					'subtotalHtml' => wc_price(0),
@@ -145,9 +124,91 @@ final class OrderService
 					'total'        => 0,
 					'totalHtml'    => wc_price(0),
 				],
-				'notices'   => [],
+				'notices'        => [],
 			],
 		];
+	}
+
+	/**
+	 * Create a WC_Order directly from the current WC cart, without going through
+	 * WC_Checkout::create_order() and its validation/hook pipeline.
+	 */
+	private function build_order_from_cart(int $customer_id): WC_Order|WP_Error
+	{
+		try {
+			$order = wc_create_order(['customer_id' => $customer_id, 'created_via' => 'staff-pos']);
+		} catch (\Throwable $throwable) {
+			wc_get_logger()->error(
+				'Staff POS order creation failed: ' . $throwable->getMessage(),
+				['source' => 'wc-staff-pos']
+			);
+
+			return new WP_Error(
+				'wc_staff_pos_order_creation_exception',
+				__('The order could not be created. Please try again.', 'wc-staff-pos'),
+				['status' => 500]
+			);
+		}
+
+		if (is_wp_error($order)) {
+			return $order;
+		}
+
+		// Add cart line items.
+		foreach (WC()->cart->get_cart() as $cart_item) {
+			$order->add_product(
+				$cart_item['data'],
+				$cart_item['quantity'],
+				[
+					'variation' => $cart_item['variation'] ?? [],
+					'totals'    => [
+						'subtotal'     => $cart_item['line_subtotal'],
+						'subtotal_tax' => $cart_item['line_subtotal_tax'],
+						'total'        => $cart_item['line_total'],
+						'tax'          => $cart_item['line_tax'],
+						'tax_data'     => $cart_item['line_tax_data'],
+					],
+				]
+			);
+		}
+
+		// Apply coupons — roll back and abort if any coupon is rejected.
+		foreach (WC()->cart->get_applied_coupons() as $code) {
+			$result = $order->apply_coupon($code);
+
+			if (is_wp_error($result)) {
+				$order->delete(true);
+
+				return new WP_Error(
+					'wc_staff_pos_coupon_error',
+					sprintf(
+					/* translators: %1$s: coupon code, %2$s: error message */
+						__('Coupon "%1$s" could not be applied: %2$s', 'wc-staff-pos'),
+						esc_html($code),
+						$result->get_error_message()
+					),
+					['status' => 422]
+				);
+			}
+		}
+
+		// Add cart fees (e.g. surcharges added by third-party plugins).
+		foreach (WC()->cart->get_fees() as $fee) {
+			$item = new WC_Order_Item_Fee();
+			$item->set_name($fee->name);
+			$item->set_total($fee->total);
+			$item->set_total_tax($fee->tax);
+
+			if (! empty($fee->tax_data)) {
+				$item->set_taxes(['total' => $fee->tax_data]);
+			}
+
+			$order->add_item($item);
+		}
+
+		$order->set_cart_hash(WC()->cart->get_cart_hash());
+
+		return $order;
 	}
 
 	/**
