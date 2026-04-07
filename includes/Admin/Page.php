@@ -23,19 +23,23 @@ final class Page
 
 	public function register_menu(): void
 	{
-		add_submenu_page(
-			'woocommerce',
+		// Register as a top-level menu so users who only have wc_staff_pos (not
+		// manage_woocommerce) can access it without WordPress re-parenting the item
+		// as an orphaned top-level entry when the WooCommerce parent is invisible.
+		add_menu_page(
 			__('Staff POS', 'wc-staff-pos'),
 			__('Staff POS', 'wc-staff-pos'),
-			'manage_woocommerce',
+			'wc_staff_pos',
 			'wc-staff-pos',
-			[$this, 'render']
+			[$this, 'render'],
+			'dashicons-store',
+			56 // Just after WooCommerce (55) in the admin sidebar.
 		);
 	}
 
 	public function enqueue_assets(string $hook_suffix): void
 	{
-		if ('woocommerce_page_wc-staff-pos' !== $hook_suffix) {
+		if ('toplevel_page_wc-staff-pos' !== $hook_suffix) {
 			return;
 		}
 
@@ -71,7 +75,7 @@ final class Page
 
 	public function render(): void
 	{
-		if (! current_user_can('manage_woocommerce')) {
+		if (! current_user_can('wc_staff_pos')) {
 			wp_die(esc_html__('You are not allowed to access Staff POS.', 'wc-staff-pos'));
 		}
 
