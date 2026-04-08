@@ -6,6 +6,7 @@ namespace WCStaffPOS;
 
 use WC_Cart;
 use WCStaffPOS\Admin\Page;
+use WCStaffPOS\Admin\SettingsPage;
 use WCStaffPOS\Api\Router;
 use WCStaffPOS\Domain\Adapters\DefaultCurrencyContextAdapter;
 use WCStaffPOS\Domain\Adapters\DefaultManualTenderRecorder;
@@ -51,10 +52,44 @@ final class Plugin
 		$order_service   = new OrderService(new DefaultManualTenderRecorder());
 
 		(new Page($product_adapter))->register();
+		(new SettingsPage())->register();
 		(new Router($cart_context, $order_service, $product_adapter))->register();
 
 		// Sync the wc_staff_pos capability to the configured roles.
 		add_action('init', [$this, 'sync_pos_capability']);
+
+		// Apply a whole-cart discount stored in the POS session.
+		add_action(
+			'woocommerce_cart_calculate_fees',
+			static function (WC_Cart $cart): void {
+				if (! WC()->session) {
+					return;
+				}
+
+				$discount = WC()->session->get('wc_pos_cart_discount', null);
+
+				if (! is_array($discount) || empty($discount['value'])) {
+					return;
+				}
+
+				$subtotal = (float) $cart->get_subtotal();
+				$value    = (float) $discount['value'];
+
+				// Clamp to prevent driving totals negative.
+				if ('percent' === ($discount['type'] ?? '')) {
+					$amount = -(min(100.0, $value) / 100.0 * $subtotal);
+				} else {
+					$amount = -min($value, $subtotal);
+				}
+
+				if (0.0 !== $amount) {
+					$cart->add_fee(
+						sanitize_text_field($discount['label'] ?? __('POS Discount', 'wc-staff-pos')),
+						$amount
+					);
+				}
+			}
+		);
 
 		// Apply any per-line custom price stored in cart item data.
 		add_action(

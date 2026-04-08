@@ -35,6 +35,30 @@ final class BootstrapController extends Controller
 		);
 	}
 
+	/**
+	 * Returns the configured tender types, falling back to sensible defaults.
+	 *
+	 * @return array<int, array{value: string, label: string}>
+	 */
+	private function get_tender_types(): array
+	{
+		$stored = get_option('wc_staff_pos_tender_types', '');
+
+		if ('' !== $stored) {
+			$decoded = json_decode($stored, true);
+
+			if (is_array($decoded) && ! empty($decoded)) {
+				return $decoded;
+			}
+		}
+
+		return [
+			['value' => 'cash', 'label' => __('Cash', 'wc-staff-pos')],
+			['value' => 'card', 'label' => __('Card', 'wc-staff-pos')],
+			['value' => 'cheque', 'label' => __('Cheque', 'wc-staff-pos')],
+		];
+	}
+
 	public function get_bootstrap(WP_REST_Request $request): array
 	{
 		unset($request);
@@ -54,12 +78,7 @@ final class BootstrapController extends Controller
 			'cart'                  => $this->cart_context->run(
 				fn (): array => $this->cart_context->get_snapshot()
 			),
-			'manualTenderTypes'     => [
-				['value' => 'cash', 'label' => __('Cash', 'wc-staff-pos')],
-				['value' => 'manual', 'label' => __('Manual', 'wc-staff-pos')],
-				['value' => 'card', 'label' => __('Card', 'wc-staff-pos')],
-				['value' => 'cheque', 'label' => __('Cheque', 'wc-staff-pos')],
-			],
+			'manualTenderTypes'     => $this->get_tender_types(),
 		];
 	}
 }

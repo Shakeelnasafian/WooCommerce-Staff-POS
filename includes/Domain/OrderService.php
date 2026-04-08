@@ -91,6 +91,8 @@ final class OrderService
 			}
 		}
 
+		$tender_type = '';
+
 		if ('manual_paid' === $mode) {
 			$tender_type = sanitize_key((string) ($payload['tender_type'] ?? 'cash')) ?: 'cash';
 			$this->manual_tender_recorder->record($order, $tender_type, get_current_user_id());
@@ -98,6 +100,9 @@ final class OrderService
 			$order->set_payment_method_title(__('Staff POS Manual Payment', 'wc-staff-pos'));
 			$order->payment_complete();
 		}
+
+		// Capture receipt data before emptying the cart.
+		$receipt = 'manual_paid' === $mode ? $this->build_receipt($order, $tender_type) : null;
 
 		WC()->cart->empty_cart();
 
@@ -108,6 +113,7 @@ final class OrderService
 				'status'     => $order->get_status(),
 				'editUrl'    => $order->get_edit_order_url(),
 				'paymentUrl' => $order->needs_payment() ? $order->get_checkout_payment_url() : '',
+				'receipt'    => $receipt,
 			],
 			'cart'  => [
 				'items'          => [],
@@ -251,6 +257,65 @@ final class OrderService
 		$order->set_billing_last_name($billing['billing_last_name'] ?? '');
 		$order->set_billing_email($billing['billing_email'] ?? '');
 		$order->set_billing_phone($billing['billing_phone'] ?? '');
+	}
+
+	/**
+	 * Build a receipt data structure for a completed manual_paid order.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function build_receipt(WC_Order $order, string $tender_type): array
+	{
+		$items = [];
+
+		foreach ($order->get_items() as $item) {
+			$items[] = [
+				'name'        => $item->get_name(),
+				'quantity'    => $item->get_quantity(),
+				'totalHtml'   => wc_price((float) $item->get_total()),
+			];
+		}
+
+		$tender_labels = [];
+		$stored        = get_option('wc_staff_pos_tender_types', '');
+
+		if ('' !== $stored) {
+			$decoded = json_decode($stored, true);
+
+			if (is_array($decoded)) {
+				foreach ($decoded as $t) {
+					$tender_labels[$t['value']] = $t['label'];
+				}
+			}
+		}
+
+		$tender_labels += ['cash' => 'Cash', 'card' => 'Card', 'cheque' => 'Cheque'];
+
+		// POS discounts are applied as negative fee items, not order coupons.
+		// Sum them separately so the receipt shows the full discount.
+		$fee_discount = 0.0;
+
+		foreach ($order->get_fees() as $fee) {
+			if ((float) $fee->get_total() < 0) {
+				$fee_discount += abs((float) $fee->get_total());
+			}
+		}
+
+		$discount_total = (float) $order->get_total_discount() + $fee_discount;
+
+		return [
+			'storeName'    => get_bloginfo('name'),
+			'orderNumber'  => $order->get_order_number(),
+			'date'         => $order->get_date_created() ? $order->get_date_created()->date_i18n(get_option('date_format') . ' ' . get_option('time_format')) : '',
+			'cashier'      => wp_get_current_user()->display_name,
+			'customerName' => trim($order->get_formatted_billing_full_name()) ?: __('Guest', 'wc-staff-pos'),
+			'items'        => $items,
+			'subtotalHtml' => wc_price((float) $order->get_subtotal()),
+			'discountHtml' => $discount_total > 0 ? wc_price($discount_total) : '',
+			'taxHtml'      => wc_price((float) $order->get_total_tax()),
+			'totalHtml'    => wc_price((float) $order->get_total()),
+			'tenderType'   => $tender_labels[$tender_type] ?? $tender_type,
+		];
 	}
 
 	private function send_customer_invoice(WC_Order $order): void

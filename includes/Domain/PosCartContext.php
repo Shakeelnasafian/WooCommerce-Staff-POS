@@ -12,6 +12,9 @@ final class PosCartContext
 {
 	private const STORAGE_PREFIX = 'wc_staff_pos_state_';
 
+	/** Maximum number of parked carts per user; oldest entry evicted when exceeded. */
+	private const MAX_HELD_CARTS = 10;
+
 	private const CART_SESSION_KEYS = [
 		'cart',
 		'cart_totals',
@@ -22,6 +25,7 @@ final class PosCartContext
 		'order_awaiting_payment',
 		'chosen_shipping_methods',
 		'shipping_for_package_0',
+		'wc_pos_cart_discount',
 	];
 
 	private CurrencyContextAdapterInterface $currency_adapter;
@@ -114,6 +118,7 @@ final class PosCartContext
 			'itemCount'      => WC()->cart->get_cart_contents_count(),
 			'supportedTypes' => $this->product_adapter->get_supported_types(),
 			'appliedCoupons' => WC()->cart->get_applied_coupons(),
+			'cartDiscount'   => $this->get_cart_discount(),
 			'totals'         => [
 				'currencyCode' => get_woocommerce_currency(),
 				'subtotal'     => (float) WC()->cart->get_subtotal(),
@@ -229,6 +234,140 @@ final class PosCartContext
 
 		WC()->cart = new WC_Cart();
 		WC()->cart->calculate_totals();
+	}
+
+	/* =========================================================
+	   Held carts
+	========================================================= */
+
+	/**
+	 * Save the current POS cart as a named held slot.
+	 * Must be called within a run() callback.
+	 *
+	 * @return array{id: string, name: string, createdAt: string, itemCount: int, totalHtml: string}
+	 */
+	public function hold_cart(string $name): array
+	{
+		$id      = uniqid('held_', true);
+		$session = $this->capture_cart_session();
+		$entry   = [
+			'id'        => $id,
+			'name'      => $name,
+			'createdAt' => current_time('c'),
+			'session'   => $session,
+			'itemCount' => WC()->cart->get_cart_contents_count(),
+			'totalHtml' => WC()->cart->get_total(),
+		];
+
+		$held      = $this->get_held_carts_meta();
+		$held[$id] = $entry;
+
+		// Evict oldest entries when the per-user cap is exceeded.
+		if (count($held) > self::MAX_HELD_CARTS) {
+			$held = array_slice($held, -self::MAX_HELD_CARTS, null, true);
+		}
+
+		update_user_meta(get_current_user_id(), 'wc_staff_pos_held_carts', $held);
+
+		return $this->map_held_entry($entry);
+	}
+
+	/**
+	 * Restore a held cart into the active POS session, replacing the current cart.
+	 * Must be called within a run() callback.
+	 */
+	public function restore_held_cart(string $held_id): bool
+	{
+		$held = $this->get_held_carts_meta();
+
+		if (! isset($held[$held_id])) {
+			return false;
+		}
+
+		$session_data = (array) ($held[$held_id]['session'] ?? []);
+
+		foreach (self::CART_SESSION_KEYS as $key) {
+			if (array_key_exists($key, $session_data)) {
+				WC()->session->set($key, $session_data[$key]);
+			} else {
+				WC()->session->__unset($key);
+			}
+		}
+
+		WC()->cart = new WC_Cart();
+		WC()->cart->calculate_totals();
+
+		return true;
+	}
+
+	/**
+	 * Delete a held cart slot.
+	 */
+	public function delete_held_cart(string $held_id): void
+	{
+		$held = $this->get_held_carts_meta();
+		unset($held[$held_id]);
+		update_user_meta(get_current_user_id(), 'wc_staff_pos_held_carts', $held);
+	}
+
+	/**
+	 * @return array<int, array{id: string, name: string, createdAt: string, itemCount: int, totalHtml: string}>
+	 */
+	public function list_held_carts(): array
+	{
+		return array_values(
+			array_map([$this, 'map_held_entry'], $this->get_held_carts_meta())
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function get_held_carts_meta(): array
+	{
+		$meta = get_user_meta(get_current_user_id(), 'wc_staff_pos_held_carts', true);
+
+		return is_array($meta) ? $meta : [];
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 * @return array{id: string, name: string, createdAt: string, itemCount: int, totalHtml: string}
+	 */
+	private function map_held_entry(array $entry): array
+	{
+		return [
+			'id'        => (string) ($entry['id'] ?? ''),
+			'name'      => (string) ($entry['name'] ?? ''),
+			'createdAt' => (string) ($entry['createdAt'] ?? ''),
+			'itemCount' => (int) ($entry['itemCount'] ?? 0),
+			'totalHtml' => (string) ($entry['totalHtml'] ?? ''),
+		];
+	}
+
+	/* =========================================================
+	   Cart discount helpers (used by CartDiscountController)
+	========================================================= */
+
+	/**
+	 * Store a discount on the POS session so it survives across requests.
+	 * Must be called within a run() callback.
+	 *
+	 * @param array{type: string, value: float, label: string}|null $discount null to clear
+	 */
+	public function set_cart_discount(?array $discount): void
+	{
+		WC()->session->set('wc_pos_cart_discount', $discount);
+	}
+
+	/**
+	 * @return array{type: string, value: float, label: string}|null
+	 */
+	public function get_cart_discount(): ?array
+	{
+		$v = WC()->session->get('wc_pos_cart_discount', null);
+
+		return is_array($v) ? $v : null;
 	}
 
 	private function get_storage_key(): string
