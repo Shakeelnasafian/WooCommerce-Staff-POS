@@ -178,25 +178,23 @@ final class SettingsPage
 			];
 		}
 
-		echo '<div id="wc-pos-tender-types">';
-
-		foreach ($types as $i => $type) {
-			$this->render_tender_row((int) $i, $type['value'], $type['label']);
-		}
-
-		echo '</div>';
+		echo '<div id="wc-pos-tender-types"></div>';
 		echo '<button type="button" class="button button-secondary" id="wc-pos-add-tender" style="margin-top:8px">' . esc_html__('+ Add tender type', 'wc-staff-pos') . '</button>';
 		echo '<p class="description">' . esc_html__('Tender types available to cashiers when marking an order as manually paid.', 'wc-staff-pos') . '</p>';
 		echo '<input type="hidden" name="wc_staff_pos_tender_types" id="wc-pos-tender-json" value="' . esc_attr(wp_json_encode($types) ?: '') . '">';
 
-		// Inline JS for the dynamic row editor.
+		// Inline JS for the dynamic row editor. Passes data via JSON to avoid innerHTML injection.
+		$placeholder_key   = esc_js(__('Key (e.g. cash)', 'wc-staff-pos'));
+		$placeholder_label = esc_js(__('Label (e.g. Cash)', 'wc-staff-pos'));
+		$aria_remove       = esc_js(__('Remove', 'wc-staff-pos'));
+		$initial_data      = wp_json_encode(array_values($types));
 		?>
 		<script>
 		(function(){
-			var container = document.getElementById('wc-pos-tender-types');
-			var hidden    = document.getElementById('wc-pos-tender-json');
-			var addBtn    = document.getElementById('wc-pos-add-tender');
-			var idx       = container ? container.children.length : 0;
+			var container    = document.getElementById('wc-pos-tender-types');
+			var hidden       = document.getElementById('wc-pos-tender-json');
+			var addBtn       = document.getElementById('wc-pos-add-tender');
+			var initialData  = <?php echo $initial_data; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_json_encode() output ?>;
 
 			function update() {
 				var rows = container.querySelectorAll('.wc-pos-tender-row');
@@ -209,33 +207,46 @@ final class SettingsPage
 				hidden.value = JSON.stringify(data);
 			}
 
-			function makeRow(i, value, label) {
+			function makeRow(value, label) {
 				var row = document.createElement('div');
 				row.className = 'wc-pos-tender-row';
 				row.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
-				row.innerHTML =
-					'<input class="wc-pos-tender-value regular-text" placeholder="<?php echo esc_js(__('Key (e.g. cash)', 'wc-staff-pos')); ?>" value="' + (value||'') + '" style="width:120px">' +
-					'<input class="wc-pos-tender-label regular-text" placeholder="<?php echo esc_js(__('Label (e.g. Cash)', 'wc-staff-pos')); ?>" value="' + (label||'') + '">' +
-					'<button type="button" class="button button-link-delete wc-pos-tender-remove" aria-label="<?php echo esc_attr(__('Remove', 'wc-staff-pos')); ?>">&times;</button>';
-				row.querySelector('.wc-pos-tender-value').addEventListener('input', update);
-				row.querySelector('.wc-pos-tender-label').addEventListener('input', update);
-				row.querySelector('.wc-pos-tender-remove').addEventListener('click', function(){
-					row.remove();
-					update();
-				});
+
+				var vInput = document.createElement('input');
+				vInput.className   = 'wc-pos-tender-value regular-text';
+				vInput.placeholder = '<?php echo $placeholder_key; ?>';
+				vInput.value       = value || '';
+				vInput.style.width = '120px';
+				vInput.addEventListener('input', update);
+
+				var lInput = document.createElement('input');
+				lInput.className   = 'wc-pos-tender-label regular-text';
+				lInput.placeholder = '<?php echo $placeholder_label; ?>';
+				lInput.value       = label || '';
+				lInput.addEventListener('input', update);
+
+				var btn = document.createElement('button');
+				btn.type      = 'button';
+				btn.className = 'button button-link-delete wc-pos-tender-remove';
+				btn.setAttribute('aria-label', '<?php echo $aria_remove; ?>');
+				btn.textContent = '\u00d7';
+				btn.addEventListener('click', function(){ row.remove(); update(); });
+
+				row.appendChild(vInput);
+				row.appendChild(lInput);
+				row.appendChild(btn);
 				return row;
 			}
 
-			if (container) {
-				container.innerHTML = '';
-				<?php foreach ($types as $i => $type): ?>
-				container.appendChild(makeRow(<?php echo (int) $i; ?>, <?php echo wp_json_encode($type['value']); ?>, <?php echo wp_json_encode($type['label']); ?>));
-				<?php endforeach; ?>
+			if (container && Array.isArray(initialData)) {
+				initialData.forEach(function(entry){
+					container.appendChild(makeRow(entry.value, entry.label));
+				});
 			}
 
 			if (addBtn) {
 				addBtn.addEventListener('click', function(){
-					container.appendChild(makeRow(idx++, '', ''));
+					container.appendChild(makeRow('', ''));
 					update();
 				});
 			}

@@ -53,6 +53,7 @@ A staff-facing Point of Sale system that runs inside the WooCommerce admin. Cash
 - Billing details (name, email, phone) editable inline; edited values always take precedence over the linked account
 
 ### Order Creation
+
 | Mode | Behaviour |
 |---|---|
 | **Create order** | Creates a pending order and copies the payment link |
@@ -106,7 +107,7 @@ All endpoints require the `wc_staff_pos` capability and a valid nonce (`X-WP-Non
 
 ## Architecture
 
-```
+```text
 woocommerce-staff-pos.php        Plugin bootstrap, HPOS declaration
 includes/
   Admin/Page.php                 Admin menu + asset enqueue

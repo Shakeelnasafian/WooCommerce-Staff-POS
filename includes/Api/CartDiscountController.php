@@ -69,7 +69,7 @@ final class CartDiscountController extends Controller
 		if ('' === $label) {
 			$label = 'percent' === $type
 				? sprintf(__('%s%% Discount', 'wc-staff-pos'), number_format_i18n($value, 0))
-				: sprintf(__('%s Discount', 'wc-staff-pos'), wc_price($value));
+				: sprintf(__('%s Discount', 'wc-staff-pos'), wp_strip_all_tags(wc_price($value)));
 		}
 
 		return $this->cart_context->run(

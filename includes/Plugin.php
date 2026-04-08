@@ -74,7 +74,13 @@ final class Plugin
 
 				$subtotal = (float) $cart->get_subtotal();
 				$value    = (float) $discount['value'];
-				$amount   = 'percent' === ($discount['type'] ?? '') ? -($subtotal * $value / 100.0) : -$value;
+
+				// Clamp to prevent driving totals negative.
+				if ('percent' === ($discount['type'] ?? '')) {
+					$amount = -(min(100.0, $value) / 100.0 * $subtotal);
+				} else {
+					$amount = -min($value, $subtotal);
+				}
 
 				if (0.0 !== $amount) {
 					$cart->add_fee(

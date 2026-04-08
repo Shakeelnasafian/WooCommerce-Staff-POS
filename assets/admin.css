@@ -572,14 +572,17 @@
 
 /* ---- Print styles ---- */
 @media print {
-  /* Hide everything except the receipt */
-  body > *                    { display: none !important; }
-  .wc-staff-pos-wrap          { display: block !important; }
-  .wc-staff-pos-app           { display: block !important; }
+  /* Hide WordPress admin chrome */
+  #adminmenuwrap, #adminmenuback, #wpadminbar, #wpfooter { display: none !important; }
+  #wpcontent, #wpbody-content { margin-left: 0 !important; padding: 0 !important; }
+
+  /* Within the POS app, hide everything except the receipt */
   .wc-staff-pos-header,
   .wc-staff-pos-banner,
   .wc-staff-pos-notices,
-  .wc-staff-pos-grid > *:not(:last-child),
+  .wc-staff-pos-tab-bar,
+  .wc-staff-pos-grid > section:first-child,
+  .wc-staff-pos-grid > section:nth-child(2),
   .wc-staff-pos-cart-header,
   .wc-staff-pos-cart-list,
   .wc-staff-pos-coupon-row,
@@ -594,6 +597,6 @@
   .wc-staff-pos-receipt-print-actions,
   .wc-staff-pos-new-transaction-btn { display: none !important; }
 
-  .wc-staff-pos-order-result { display: block !important; border: none !important; padding: 0 !important; }
-  .wc-staff-pos-receipt       { border: none !important; padding: 0 !important; margin: 0 !important; display: block !important; }
+  .wc-staff-pos-order-result { border: none !important; padding: 0 !important; }
+  .wc-staff-pos-receipt       { border: none !important; padding: 0 !important; margin: 0 !important; }
 }

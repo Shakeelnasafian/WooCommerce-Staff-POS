@@ -291,6 +291,18 @@ final class OrderService
 
 		$tender_labels += ['cash' => 'Cash', 'card' => 'Card', 'cheque' => 'Cheque'];
 
+		// POS discounts are applied as negative fee items, not order coupons.
+		// Sum them separately so the receipt shows the full discount.
+		$fee_discount = 0.0;
+
+		foreach ($order->get_fees() as $fee) {
+			if ((float) $fee->get_total() < 0) {
+				$fee_discount += abs((float) $fee->get_total());
+			}
+		}
+
+		$discount_total = (float) $order->get_total_discount() + $fee_discount;
+
 		return [
 			'storeName'    => get_bloginfo('name'),
 			'orderNumber'  => $order->get_order_number(),
@@ -299,7 +311,7 @@ final class OrderService
 			'customerName' => trim($order->get_formatted_billing_full_name()) ?: __('Guest', 'wc-staff-pos'),
 			'items'        => $items,
 			'subtotalHtml' => wc_price((float) $order->get_subtotal()),
-			'discountHtml' => wc_price((float) $order->get_total_discount()),
+			'discountHtml' => $discount_total > 0 ? wc_price($discount_total) : '',
 			'taxHtml'      => wc_price((float) $order->get_total_tax()),
 			'totalHtml'    => wc_price((float) $order->get_total()),
 			'tenderType'   => $tender_labels[$tender_type] ?? $tender_type,

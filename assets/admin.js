@@ -74,10 +74,6 @@
     return h('div', { key: 'notice-' + index, className: classNames('wc-staff-pos-notice', notice.type) }, notice.message);
   }
 
-  function createEmptyCart() {
-    return { items: [], itemCount: 0, coupons: [], totals: {}, notices: [] };
-  }
-
   function findVariation(product, selectedAttributes) {
     if (!product || !product.variations || !product.variations.length) return null;
     return product.variations.find(function (variation) {
@@ -184,7 +180,9 @@
     var _a = useState(null), bootstrap = _a[0], setBootstrap = _a[1];
     var _b = useState({ items: [], itemCount: 0, totals: {}, appliedCoupons: [], notices: [] }), cart = _b[0], setCart = _b[1];
     var _p = useState(false), loading = _p[0], setLoading = _p[1];
-    var _q = useState(''), busyAction = _q[0], setBusyAction = _q[1];
+    // busyMap: { [actionKey]: refCount } — prevents race conditions where a
+    // faster request clearing a single string would unlock the UI prematurely.
+    var _q = useState({}), busyMap = _q[0], setBusyMap = _q[1];
     var _n = useState(''), feedback = _n[0], setFeedback = _n[1];
     var _o = useState(null), orderResult = _o[0], setOrderResult = _o[1];
 
@@ -233,6 +231,27 @@
     // Ref to trigger auto-add after product details load (barcode scanner flow)
     var autoAddRef = useRef(false);
 
+    // ---- busy helpers -------------------------------------------------------
+    function startBusy(key) {
+      setBusyMap(function (m) {
+        var n = Object.assign({}, m);
+        n[key] = (n[key] || 0) + 1;
+        return n;
+      });
+    }
+    function stopBusy(key) {
+      setBusyMap(function (m) {
+        var n = Object.assign({}, m);
+        if ((n[key] || 0) > 1) { n[key]--; } else { delete n[key]; }
+        return n;
+      });
+    }
+    function isBusy(key) { return !!(busyMap[key]); }
+    var anyBusy = Object.keys(busyMap).length > 0;
+    // Legacy alias so existing `isBusy('xyz')` checks still work via isBusy
+    var busyAction = Object.keys(busyMap)[0] || '';
+    // -------------------------------------------------------------------------
+
     var selectedVariation = useMemo(function () {
       return findVariation(selectedProduct, selectedAttributes);
     }, [selectedProduct, selectedAttributes]);
@@ -249,10 +268,15 @@
     /* ---- Bootstrap ---- */
     useEffect(function () {
       setLoading(true);
-      request('/bootstrap')
-        .then(function (res) {
+      Promise.all([
+        request('/bootstrap'),
+        request('/held-carts')
+      ])
+        .then(function (results) {
+          var res = results[0];
           setBootstrap(res);
           setCart(res.cart || { items: [], itemCount: 0, totals: {}, appliedCoupons: [], notices: [] });
+          setHeldCarts((results[1] && results[1].items) || []);
         })
         .catch(function (err) { setFeedback(err.message || 'Failed to load Staff POS.'); })
         .finally(function () { setLoading(false); });
@@ -308,7 +332,7 @@
           // Barcode scanner: auto-add if the product is simple & in stock.
           if (autoAddRef.current && product && product.isSupported && product.inStock && product.type === 'simple') {
             autoAddRef.current = false;
-            setBusyAction('add-to-cart');
+            startBusy('add-to-cart');
             request('/cart/items', {
               method: 'POST',
               data: { product_id: product.id, quantity: 1, variation_id: 0, selected_attributes: {} }
@@ -320,7 +344,7 @@
                 setSelectedProductId(null);
               })
               .catch(function (e) { setFeedback(e.message || 'Could not add product.'); })
-              .finally(function () { setBusyAction(''); });
+              .finally(function () { stopBusy('add-to-cart'); });
           } else {
             autoAddRef.current = false;
           }
@@ -386,7 +410,7 @@
     }
 
     function handleCreateCustomer() {
-      setBusyAction('create-customer');
+      startBusy('create-customer');
       request('/customers', { method: 'POST', data: customerDraft })
         .then(function (res) {
           handleSelectCustomer(res.item);
@@ -394,7 +418,7 @@
           setCustomerQuery(res.item.email || res.item.name || '');
         })
         .catch(function (err) { setFeedback(err.message || 'Customer could not be created.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy('create-customer'); });
     }
 
     function handleAttributeChange(name, value) {
@@ -407,7 +431,7 @@
 
     function handleAddToCart() {
       if (!selectedProduct) return;
-      setBusyAction('add-to-cart');
+      startBusy('add-to-cart');
       request('/cart/items', {
         method: 'POST',
         data: {
@@ -423,7 +447,7 @@
           setFeedback('Product added to the POS cart.');
         })
         .catch(function (err) { setFeedback(err.message || 'Product could not be added to the cart.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy('add-to-cart'); });
     }
 
     /* Barcode scanner: Enter key in product search field */
@@ -455,20 +479,21 @@
 
     function handleClearCart() {
       if (!window.confirm('Clear the entire POS cart?')) return;
-      setBusyAction('clear-cart');
+      startBusy('clear-cart');
       request('/cart', { method: 'DELETE' })
         .then(function (res) { syncCart(res.cart); setFeedback('Cart cleared.'); })
         .catch(function (err) { setFeedback(err.message || 'Cart could not be cleared.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy('clear-cart'); });
     }
 
     function handleApplyCoupon() {
-      if (!couponCode) return;
-      setBusyAction('apply-coupon');
-      request('/cart/coupons', { method: 'POST', data: { code: couponCode } })
+      var code = couponCode.trim();
+      if (!code) return;
+      startBusy('apply-coupon');
+      request('/cart/coupons', { method: 'POST', data: { code: code } })
         .then(function (res) { syncCart(res.cart); setCouponCode(''); setFeedback('Coupon applied.'); })
         .catch(function (err) { setFeedback(err.message || 'Coupon could not be applied.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy('apply-coupon'); });
     }
 
     function handleRemoveCoupon(code) {
@@ -477,63 +502,23 @@
         .catch(function (err) { setFeedback(err.message || 'Coupon could not be removed.'); });
     }
 
-    function handleApplyCoupon() {
-      if (!couponCode.trim()) {
-        return;
-      }
-
-      setBusyAction('apply-coupon');
-      request('/cart/coupons', {
-        method: 'POST',
-        data: { code: couponCode }
-      })
-        .then(function (response) {
-          syncCart(response.cart);
-          setCouponCode('');
-          setFeedback('Coupon applied to the POS cart.');
-        })
-        .catch(function (error) {
-          setFeedback(error.message || 'Coupon could not be applied.');
-        })
-        .finally(function () {
-          setBusyAction('');
-        });
-    }
-
-    function handleRemoveCoupon(code) {
-      setBusyAction('remove-coupon-' + code);
-      request('/cart/coupons', {
-        method: 'DELETE',
-        data: { code: code }
-      })
-        .then(function (response) {
-          syncCart(response.cart);
-          setFeedback('Coupon removed from the POS cart.');
-        })
-        .catch(function (error) {
-          setFeedback(error.message || 'Coupon could not be removed.');
-        })
-        .finally(function () {
-          setBusyAction('');
-        });
-    }
-
     function handleHoldCart() {
       var name = window.prompt('Name this held cart (optional):');
       if (name === null) return; // cancelled
-      setBusyAction('hold-cart');
+      startBusy('hold-cart');
       request('/held-carts', { method: 'POST', data: { name: name || '' } })
         .then(function (res) {
           syncCart(res.cart);
           setFeedback('Cart saved as "' + (res.heldCart && res.heldCart.name) + '".');
-          if (viewMode === 'held-carts') setHeldCarts(function (cur) { return [res.heldCart].concat(cur); });
+          setHeldCarts(function (cur) { return res.heldCart ? [res.heldCart].concat(cur) : cur; });
         })
         .catch(function (err) { setFeedback(err.message || 'Cart could not be held.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy('hold-cart'); });
     }
 
     function handleRestoreHeldCart(id) {
-      setBusyAction('restore-cart-' + id);
+      var busyKey = 'restore-cart-' + id;
+      startBusy(busyKey);
       request('/held-carts/' + encodeURIComponent(id) + '/restore', { method: 'POST' })
         .then(function (res) {
           syncCart(res.cart);
@@ -542,10 +527,11 @@
           setFeedback('Held cart restored.');
         })
         .catch(function (err) { setFeedback(err.message || 'Cart could not be restored.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy(busyKey); });
     }
 
-    function handleDeleteHeldCart(id) {
+    function handleDeleteHeldCart(id, name) {
+      if (!window.confirm('Delete held cart "' + (name || 'this cart') + '"?')) return;
       request('/held-carts/' + encodeURIComponent(id), { method: 'DELETE' })
         .then(function (res) { setHeldCarts(res.items || []); setFeedback('Held cart deleted.'); })
         .catch(function (err) { setFeedback(err.message || 'Held cart could not be deleted.'); });
@@ -554,19 +540,19 @@
     function handleApplyDiscount() {
       var val = parseFloat(discountValue);
       if (isNaN(val) || val <= 0) return;
-      setBusyAction('apply-discount');
+      startBusy('apply-discount');
       request('/cart/discount', { method: 'POST', data: { type: discountType, value: val } })
         .then(function (res) { syncCart(res.cart); setDiscountValue(''); setFeedback('Discount applied.'); })
         .catch(function (err) { setFeedback(err.message || 'Discount could not be applied.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy('apply-discount'); });
     }
 
     function handleClearDiscount() {
-      setBusyAction('clear-discount');
+      startBusy('clear-discount');
       request('/cart/discount', { method: 'DELETE' })
         .then(function (res) { syncCart(res.cart); setFeedback('Discount removed.'); })
         .catch(function (err) { setFeedback(err.message || 'Discount could not be removed.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy('clear-discount'); });
     }
 
     function buildBillingPayload() {
@@ -590,7 +576,8 @@
     }
 
     function handleCreateOrder(mode, sendEmail) {
-      setBusyAction(mode + (sendEmail ? '-send' : '-create'));
+      var busyKey = mode + (sendEmail ? '-send' : '-create');
+      startBusy(busyKey);
       request('/orders', {
         method: 'POST',
         data: {
@@ -616,7 +603,7 @@
           }
         })
         .catch(function (err) { setFeedback(err.message || 'Order could not be created.'); })
-        .finally(function () { setBusyAction(''); });
+        .finally(function () { stopBusy(busyKey); });
     }
 
     function handleNewTransaction() {
@@ -745,9 +732,9 @@
             ? h('button', {
                 type: 'button',
                 className: 'button button-secondary',
-                disabled: busyAction === 'create-customer',
+                disabled: isBusy('create-customer'),
                 onClick: handleCreateCustomer
-              }, busyAction === 'create-customer' ? 'Creating\u2026' : 'Create customer')
+              }, isBusy('create-customer') ? 'Creating\u2026' : 'Create customer')
             : null
         ),
 
@@ -884,9 +871,9 @@
                       h('button', {
                         type: 'button',
                         className: 'button button-primary',
-                        disabled: !selectedProduct.isSupported || !selectedProduct.inStock || busyAction === 'add-to-cart' || (selectedProduct.type === 'variable' && !selectedVariation) || (selectedVariation && !selectedVariation.inStock) || (priceOverride && !customPrice),
+                        disabled: !selectedProduct.isSupported || !selectedProduct.inStock || isBusy('add-to-cart') || (selectedProduct.type === 'variable' && !selectedVariation) || (selectedVariation && !selectedVariation.inStock) || (priceOverride && !customPrice),
                         onClick: handleAddToCart
-                      }, busyAction === 'add-to-cart' ? 'Adding\u2026' : 'Add to cart')
+                      }, isBusy('add-to-cart') ? 'Adding\u2026' : 'Add to cart')
                     )
                   : h('p', { className: 'wc-staff-pos-empty-state' }, loading ? 'Loading\u2026' : 'Select a product to configure it.')
               )
@@ -918,13 +905,13 @@
                           h('div', { className: 'wc-staff-pos-held-cart-actions' },
                             h('button', {
                               type: 'button', className: 'button button-primary button-small',
-                              disabled: !!busyAction,
+                              disabled: anyBusy,
                               onClick: function () { handleRestoreHeldCart(hc.id); }
-                            }, busyAction === 'restore-cart-' + hc.id ? 'Restoring\u2026' : 'Restore'),
+                            }, isBusy('restore-cart-') + hc.id ? 'Restoring\u2026' : 'Restore'),
                             h('button', {
                               type: 'button', className: 'button button-link-delete button-small',
                               'aria-label': 'Delete held cart ' + hc.name,
-                              onClick: function () { handleDeleteHeldCart(hc.id); }
+                              onClick: function () { handleDeleteHeldCart(hc.id, hc.name); }
                             }, 'Delete')
                           )
                         );
@@ -943,17 +930,17 @@
                 ? h('button', {
                     type: 'button',
                     className: 'button button-small button-secondary',
-                    disabled: !!busyAction,
+                    disabled: anyBusy,
                     onClick: handleHoldCart
-                  }, busyAction === 'hold-cart' ? 'Holding\u2026' : 'Hold cart')
+                  }, isBusy('hold-cart') ? 'Holding\u2026' : 'Hold cart')
                 : null,
               hasCartItems
                 ? h('button', {
                     type: 'button',
                     className: 'button button-small button-link-delete',
-                    disabled: !!busyAction,
+                    disabled: anyBusy,
                     onClick: handleClearCart
-                  }, busyAction === 'clear-cart' ? 'Clearing\u2026' : 'Clear cart')
+                  }, isBusy('clear-cart') ? 'Clearing\u2026' : 'Clear cart')
                 : null
             )
           ),
@@ -976,9 +963,9 @@
             }),
             h('button', {
               type: 'button', className: 'button button-secondary',
-              disabled: !couponCode || busyAction === 'apply-coupon',
+              disabled: !couponCode || isBusy('apply-coupon'),
               onClick: handleApplyCoupon
-            }, busyAction === 'apply-coupon' ? 'Applying\u2026' : 'Apply')
+            }, isBusy('apply-coupon') ? 'Applying\u2026' : 'Apply')
           ),
           cart.appliedCoupons && cart.appliedCoupons.length
             ? h('div', { className: 'wc-staff-pos-applied-coupons' },
@@ -998,7 +985,7 @@
                 h('button', {
                   type: 'button', className: 'wc-staff-pos-coupon-remove',
                   'aria-label': 'Remove discount',
-                  disabled: busyAction === 'clear-discount',
+                  disabled: isBusy('clear-discount'),
                   onClick: handleClearDiscount
                 }, '\u00d7')
               )
@@ -1021,9 +1008,9 @@
                 }),
                 h('button', {
                   type: 'button', className: 'button button-secondary',
-                  disabled: !discountValue || busyAction === 'apply-discount',
+                  disabled: !discountValue || isBusy('apply-discount'),
                   onClick: handleApplyDiscount
-                }, busyAction === 'apply-discount' ? 'Applying\u2026' : 'Discount')
+                }, isBusy('apply-discount') ? 'Applying\u2026' : 'Discount')
               ),
 
           /* Totals */
@@ -1055,17 +1042,17 @@
           h('div', { className: 'wc-staff-pos-actions' },
             h('button', {
               type: 'button', className: 'button',
-              disabled: !hasCartItems || !!busyAction,
+              disabled: !hasCartItems || anyBusy,
               onClick: function () { handleCreateOrder('payment_link', false); }
             }, 'Create order'),
             h('button', {
               type: 'button', className: 'button button-secondary',
-              disabled: !hasCartItems || !!busyAction,
+              disabled: !hasCartItems || anyBusy,
               onClick: function () { handleCreateOrder('payment_link', true); }
             }, 'Send payment link'),
             h('button', {
               type: 'button', className: 'button button-primary',
-              disabled: !hasCartItems || !!busyAction,
+              disabled: !hasCartItems || anyBusy,
               onClick: function () { handleCreateOrder('manual_paid', false); }
             }, 'Mark paid')
           ),

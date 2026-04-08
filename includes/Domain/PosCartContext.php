@@ -12,6 +12,9 @@ final class PosCartContext
 {
 	private const STORAGE_PREFIX = 'wc_staff_pos_state_';
 
+	/** Maximum number of parked carts per user; oldest entry evicted when exceeded. */
+	private const MAX_HELD_CARTS = 10;
+
 	private const CART_SESSION_KEYS = [
 		'cart',
 		'cart_totals',
@@ -256,8 +259,13 @@ final class PosCartContext
 			'totalHtml' => WC()->cart->get_total(),
 		];
 
-		$held       = $this->get_held_carts_meta();
-		$held[$id]  = $entry;
+		$held      = $this->get_held_carts_meta();
+		$held[$id] = $entry;
+
+		// Evict oldest entries when the per-user cap is exceeded.
+		if (count($held) > self::MAX_HELD_CARTS) {
+			$held = array_slice($held, -self::MAX_HELD_CARTS, null, true);
+		}
 
 		update_user_meta(get_current_user_id(), 'wc_staff_pos_held_carts', $held);
 
@@ -365,31 +373,6 @@ final class PosCartContext
 	private function get_storage_key(): string
 	{
 		return self::STORAGE_PREFIX . get_current_user_id();
-	}
-
-	/**
-	 * @return array<int, array<string, string>>
-	 */
-	private function get_applied_coupons(): array
-	{
-		$coupons = [];
-
-		foreach (WC()->cart->get_applied_coupons() as $code) {
-			$formatted_code = function_exists('wc_format_coupon_code')
-				? wc_format_coupon_code((string) $code)
-				: wc_clean((string) $code);
-
-			if ('' === $formatted_code) {
-				continue;
-			}
-
-			$coupons[] = [
-				'code'  => $formatted_code,
-				'label' => $formatted_code,
-			];
-		}
-
-		return $coupons;
 	}
 
 	/**
