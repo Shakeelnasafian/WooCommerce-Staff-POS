@@ -65,6 +65,7 @@ final class Page
 				'root'                  => esc_url_raw(rest_url('wc-pos/v1/')),
 				'nonce'                 => wp_create_nonce('wp_rest'),
 				'title'                 => __('Staff POS', 'wc-staff-pos'),
+				'currencySymbol'        => html_entity_decode(get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8'),
 				'supportedProductTypes' => $this->product_adapter->get_supported_types(),
 				'strings'               => [
 					'unsupportedProduct' => __('This product type is not supported in Staff POS yet.', 'wc-staff-pos'),

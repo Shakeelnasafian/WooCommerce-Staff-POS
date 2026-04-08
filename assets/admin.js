@@ -27,6 +27,49 @@
     return h('span', { dangerouslySetInnerHTML: { __html: html || '' } });
   }
 
+  function get_woocommerce_currency_symbol_js() {
+    return (config && config.currencySymbol) ? config.currencySymbol : '$';
+  }
+
+  function Receipt(props) {
+    var r = props.receipt;
+    if (!r) return null;
+    return h('div', { className: 'wc-staff-pos-receipt' },
+      h('div', { className: 'wc-staff-pos-receipt-store' }, r.storeName),
+      h('div', { className: 'wc-staff-pos-receipt-meta' },
+        h('span', null, 'Order #' + r.orderNumber),
+        h('span', null, r.date)
+      ),
+      h('div', { className: 'wc-staff-pos-receipt-meta' },
+        h('span', null, 'Cashier: ' + r.cashier),
+        h('span', null, 'Customer: ' + r.customerName)
+      ),
+      h('hr', { className: 'wc-staff-pos-receipt-hr' }),
+      h('div', { className: 'wc-staff-pos-receipt-items' },
+        r.items.map(function (item, i) {
+          return h('div', { key: i, className: 'wc-staff-pos-receipt-item' },
+            h('span', null, item.quantity + '\u00d7 ' + item.name),
+            htmlNode(item.totalHtml)
+          );
+        })
+      ),
+      h('hr', { className: 'wc-staff-pos-receipt-hr' }),
+      h('div', { className: 'wc-staff-pos-receipt-totals' },
+        h('div', null, h('span', null, 'Subtotal'), htmlNode(r.subtotalHtml)),
+        h('div', null, h('span', null, 'Discount'), htmlNode(r.discountHtml)),
+        h('div', null, h('span', null, 'Tax'), htmlNode(r.taxHtml)),
+        h('div', { className: 'is-total' }, h('strong', null, 'Total'), htmlNode(r.totalHtml))
+      ),
+      h('div', { className: 'wc-staff-pos-receipt-tender' }, 'Paid by: ' + r.tenderType),
+      h('div', { className: 'wc-staff-pos-receipt-print-actions' },
+        h('button', {
+          type: 'button', className: 'button button-secondary',
+          onClick: function () { window.print(); }
+        }, 'Print receipt')
+      )
+    );
+  }
+
   function renderNotice(notice, index) {
     return h('div', { key: 'notice-' + index, className: classNames('wc-staff-pos-notice', notice.type) }, notice.message);
   }
@@ -176,6 +219,17 @@
     var _ho = useState([]), historyOrders = _ho[0], setHistoryOrders = _ho[1];
     var _hl = useState(false), historyLoading = _hl[0], setHistoryLoading = _hl[1];
 
+    // Held carts
+    var _hc = useState([]), heldCarts = _hc[0], setHeldCarts = _hc[1];
+    var _hcl = useState(false), heldCartsLoading = _hcl[0], setHeldCartsLoading = _hcl[1];
+
+    // Cart discount
+    var _dt = useState('percent'), discountType = _dt[0], setDiscountType = _dt[1];
+    var _dv = useState(''), discountValue = _dv[0], setDiscountValue = _dv[1];
+
+    // Receipt visibility
+    var _rv = useState(false), showReceipt = _rv[0], setShowReceipt = _rv[1];
+
     // Ref to trigger auto-add after product details load (barcode scanner flow)
     var autoAddRef = useRef(false);
 
@@ -282,6 +336,16 @@
         .then(function (res) { setHistoryOrders(res.items || []); })
         .catch(function (err) { setFeedback(err.message || 'Failed to load order history.'); })
         .finally(function () { setHistoryLoading(false); });
+    }, [viewMode]);
+
+    /* ---- Load held carts when panel switches ---- */
+    useEffect(function () {
+      if (viewMode !== 'held-carts') return;
+      setHeldCartsLoading(true);
+      request('/held-carts')
+        .then(function (res) { setHeldCarts(res.items || []); })
+        .catch(function (err) { setFeedback(err.message || 'Failed to load held carts.'); })
+        .finally(function () { setHeldCartsLoading(false); });
     }, [viewMode]);
 
     /* ======================================================
@@ -454,6 +518,57 @@
         });
     }
 
+    function handleHoldCart() {
+      var name = window.prompt('Name this held cart (optional):');
+      if (name === null) return; // cancelled
+      setBusyAction('hold-cart');
+      request('/held-carts', { method: 'POST', data: { name: name || '' } })
+        .then(function (res) {
+          syncCart(res.cart);
+          setFeedback('Cart saved as "' + (res.heldCart && res.heldCart.name) + '".');
+          if (viewMode === 'held-carts') setHeldCarts(function (cur) { return [res.heldCart].concat(cur); });
+        })
+        .catch(function (err) { setFeedback(err.message || 'Cart could not be held.'); })
+        .finally(function () { setBusyAction(''); });
+    }
+
+    function handleRestoreHeldCart(id) {
+      setBusyAction('restore-cart-' + id);
+      request('/held-carts/' + encodeURIComponent(id) + '/restore', { method: 'POST' })
+        .then(function (res) {
+          syncCart(res.cart);
+          setHeldCarts(function (cur) { return cur.filter(function (c) { return c.id !== id; }); });
+          setViewMode('products');
+          setFeedback('Held cart restored.');
+        })
+        .catch(function (err) { setFeedback(err.message || 'Cart could not be restored.'); })
+        .finally(function () { setBusyAction(''); });
+    }
+
+    function handleDeleteHeldCart(id) {
+      request('/held-carts/' + encodeURIComponent(id), { method: 'DELETE' })
+        .then(function (res) { setHeldCarts(res.items || []); setFeedback('Held cart deleted.'); })
+        .catch(function (err) { setFeedback(err.message || 'Held cart could not be deleted.'); });
+    }
+
+    function handleApplyDiscount() {
+      var val = parseFloat(discountValue);
+      if (isNaN(val) || val <= 0) return;
+      setBusyAction('apply-discount');
+      request('/cart/discount', { method: 'POST', data: { type: discountType, value: val } })
+        .then(function (res) { syncCart(res.cart); setDiscountValue(''); setFeedback('Discount applied.'); })
+        .catch(function (err) { setFeedback(err.message || 'Discount could not be applied.'); })
+        .finally(function () { setBusyAction(''); });
+    }
+
+    function handleClearDiscount() {
+      setBusyAction('clear-discount');
+      request('/cart/discount', { method: 'DELETE' })
+        .then(function (res) { syncCart(res.cart); setFeedback('Discount removed.'); })
+        .catch(function (err) { setFeedback(err.message || 'Discount could not be removed.'); })
+        .finally(function () { setBusyAction(''); });
+    }
+
     function buildBillingPayload() {
       // customerDraft is already pre-populated from the selected customer on selection,
       // so edited values always take precedence regardless of guest/account mode.
@@ -506,6 +621,7 @@
 
     function handleNewTransaction() {
       setOrderResult(null);
+      setShowReceipt(false);
       setSelectedCustomer(null);
       setGuestMode(false);
       setSelectedProductId(null);
@@ -518,12 +634,15 @@
       setCustomerDraft({ first_name: '', last_name: '', email: '', phone: '' });
       setOrderNote('');
       setCouponCode('');
+      setDiscountValue('');
       setFeedback('');
     }
 
     var tenderOptions = bootstrap && bootstrap.manualTenderTypes && bootstrap.manualTenderTypes.length
       ? bootstrap.manualTenderTypes
       : [{ value: 'cash', label: 'Cash' }, { value: 'card', label: 'Card' }, { value: 'manual', label: 'Manual' }];
+
+    var activeDiscount = cart && cart.cartDiscount ? cart.cartDiscount : null;
 
     var hasCartItems = cart && cart.items && cart.items.length > 0;
 
@@ -646,7 +765,12 @@
               type: 'button',
               className: classNames('wc-staff-pos-tab', viewMode === 'history' && 'is-active'),
               onClick: function () { setViewMode('history'); }
-            }, 'Recent orders')
+            }, 'Recent orders'),
+            h('button', {
+              type: 'button',
+              className: classNames('wc-staff-pos-tab', viewMode === 'held-carts' && 'is-active'),
+              onClick: function () { setViewMode('held-carts'); }
+            }, heldCarts.length ? 'Held carts (' + heldCarts.length + ')' : 'Held carts')
           ),
 
           /* ---- Products view ---- */
@@ -777,6 +901,36 @@
                     ? historyOrders.map(function (o) { return h(OrderRow, { key: 'order-' + o.id, order: o }); })
                     : h('p', { className: 'wc-staff-pos-empty-state' }, 'No POS orders found.')
               )
+            : null,
+
+          /* ---- Held carts view ---- */
+          viewMode === 'held-carts'
+            ? h('div', { className: 'wc-staff-pos-held-carts' },
+                heldCartsLoading
+                  ? h('p', { className: 'wc-staff-pos-empty-state' }, 'Loading\u2026')
+                  : heldCarts.length
+                    ? heldCarts.map(function (hc) {
+                        return h('div', { key: 'hc-' + hc.id, className: 'wc-staff-pos-held-cart-row' },
+                          h('div', { className: 'wc-staff-pos-held-cart-info' },
+                            h('strong', null, hc.name),
+                            h('span', { className: 'wc-staff-pos-meta' }, hc.itemCount + ' item(s) \u2013 ' + hc.createdAt)
+                          ),
+                          h('div', { className: 'wc-staff-pos-held-cart-actions' },
+                            h('button', {
+                              type: 'button', className: 'button button-primary button-small',
+                              disabled: !!busyAction,
+                              onClick: function () { handleRestoreHeldCart(hc.id); }
+                            }, busyAction === 'restore-cart-' + hc.id ? 'Restoring\u2026' : 'Restore'),
+                            h('button', {
+                              type: 'button', className: 'button button-link-delete button-small',
+                              'aria-label': 'Delete held cart ' + hc.name,
+                              onClick: function () { handleDeleteHeldCart(hc.id); }
+                            }, 'Delete')
+                          )
+                        );
+                      })
+                    : h('p', { className: 'wc-staff-pos-empty-state' }, 'No held carts. Use \u201cHold cart\u201d in the cart panel to park a cart and start a new one.')
+              )
             : null
         ),
 
@@ -784,14 +938,24 @@
         h('section', { className: 'wc-staff-pos-panel' },
           h('div', { className: 'wc-staff-pos-cart-header' },
             h('h2', null, 'Cart'),
-            hasCartItems
-              ? h('button', {
-                  type: 'button',
-                  className: 'button button-link-delete',
-                  disabled: !!busyAction,
-                  onClick: handleClearCart
-                }, busyAction === 'clear-cart' ? 'Clearing\u2026' : 'Clear cart')
-              : null
+            h('div', { className: 'wc-staff-pos-cart-header-actions' },
+              hasCartItems
+                ? h('button', {
+                    type: 'button',
+                    className: 'button button-small button-secondary',
+                    disabled: !!busyAction,
+                    onClick: handleHoldCart
+                  }, busyAction === 'hold-cart' ? 'Holding\u2026' : 'Hold cart')
+                : null,
+              hasCartItems
+                ? h('button', {
+                    type: 'button',
+                    className: 'button button-small button-link-delete',
+                    disabled: !!busyAction,
+                    onClick: handleClearCart
+                  }, busyAction === 'clear-cart' ? 'Clearing\u2026' : 'Clear cart')
+                : null
+            )
           ),
 
           hasCartItems
@@ -826,6 +990,41 @@
                 })
               )
             : null,
+
+          /* Discount */
+          activeDiscount
+            ? h('div', { className: 'wc-staff-pos-active-discount' },
+                h('span', null, activeDiscount.label || 'Discount'),
+                h('button', {
+                  type: 'button', className: 'wc-staff-pos-coupon-remove',
+                  'aria-label': 'Remove discount',
+                  disabled: busyAction === 'clear-discount',
+                  onClick: handleClearDiscount
+                }, '\u00d7')
+              )
+            : h('div', { className: 'wc-staff-pos-discount-row' },
+                h('select', {
+                  className: 'wc-staff-pos-discount-type',
+                  value: discountType,
+                  onChange: function (e) { setDiscountType(e.target.value); }
+                },
+                  h('option', { value: 'percent' }, '%'),
+                  h('option', { value: 'fixed' }, get_woocommerce_currency_symbol_js())
+                ),
+                h('input', {
+                  type: 'number', min: 0, step: '0.01',
+                  className: 'wc-staff-pos-discount-value',
+                  placeholder: discountType === 'percent' ? 'e.g. 10' : 'e.g. 5.00',
+                  value: discountValue,
+                  onChange: function (e) { setDiscountValue(e.target.value); },
+                  onKeyDown: function (e) { if (e.key === 'Enter') handleApplyDiscount(); }
+                }),
+                h('button', {
+                  type: 'button', className: 'button button-secondary',
+                  disabled: !discountValue || busyAction === 'apply-discount',
+                  onClick: handleApplyDiscount
+                }, busyAction === 'apply-discount' ? 'Applying\u2026' : 'Discount')
+              ),
 
           /* Totals */
           h('div', { className: 'wc-staff-pos-totals' },
@@ -890,6 +1089,13 @@
                 orderResult.editUrl
                   ? h('div', null, h('a', { href: orderResult.editUrl, target: '_blank', rel: 'noreferrer' }, 'Open in WooCommerce'))
                   : null,
+                orderResult.receipt
+                  ? h('button', {
+                      type: 'button', className: 'button button-secondary',
+                      onClick: function () { setShowReceipt(function (v) { return !v; }); }
+                    }, showReceipt ? 'Hide receipt' : 'Show receipt')
+                  : null,
+                showReceipt && orderResult.receipt ? h(Receipt, { receipt: orderResult.receipt }) : null,
                 h('button', {
                   type: 'button', className: 'button button-primary wc-staff-pos-new-transaction-btn',
                   onClick: handleNewTransaction

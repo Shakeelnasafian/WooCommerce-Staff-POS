@@ -139,18 +139,18 @@ The following items are planned to bring this plugin to production-ready status.
 
 ### 🔴 Critical
 
-- [ ] **Receipt printing** — Generate a printable receipt (HTML/PDF) after `manual_paid` orders; trigger browser print dialog automatically
+- [x] **Receipt printing** — Printable receipt after `manual_paid` orders with store name, items, totals, tender type, and browser print dialog
 - [ ] **Offline / connectivity resilience** — Queue cart mutations locally when the REST API is unreachable and replay on reconnect
-- [ ] **Role management UI** — Settings page to assign/revoke `wc_staff_pos` and `wc_staff_pos_price_override` to any role without writing code
+- [x] **Role management UI** — Settings page (`Staff POS → Settings`) to assign/revoke `wc_staff_pos` and `wc_staff_pos_price_override` to any role; configure tender types without code changes
 - [ ] **Stock reservation** — Reserve stock when an item is added to the POS cart so concurrent sessions cannot oversell
 
 ### 🟠 High Priority
 
 - [ ] **Split tender** — Allow a single order to be paid with multiple payment methods (e.g. part cash, part card)
 - [ ] **Refunds / returns** — Initiate a WooCommerce refund from the POS order history panel
-- [ ] **Held / parked carts** — Save the current cart under a named slot and restore it later (useful for queuing customers)
+- [x] **Held / parked carts** — Save the current cart under a named slot and restore it later; dedicated "Held carts" tab shows all parked carts with restore/delete actions
 - [ ] **Barcode label printing** — Print product barcodes directly from the product detail panel
-- [ ] **Discount by percentage** — Apply a percentage discount to the whole cart (not just per-item price override)
+- [x] **Discount by percentage or fixed amount** — Apply a cart-level percentage or fixed discount via a WooCommerce fee; discount persists across cart operations and is shown as a chip
 - [ ] **Product bundles support** — Handle `woocommerce-product-bundles` composed products in the cart
 
 ### 🟡 Medium Priority

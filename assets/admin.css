@@ -481,8 +481,119 @@
 /* ---- Empty state ---- */
 .wc-staff-pos-empty-state { color: #61707f; }
 
+/* ---- Cart header actions ---- */
+.wc-staff-pos-cart-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ---- Cart discount row ---- */
+.wc-staff-pos-discount-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  align-items: center;
+}
+.wc-staff-pos-discount-type  { width: 60px; flex-shrink: 0; }
+.wc-staff-pos-discount-value { flex: 1; min-width: 0; }
+
+.wc-staff-pos-active-discount {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--wc-pos-accent-soft);
+  color: var(--wc-pos-accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---- Held carts ---- */
+.wc-staff-pos-held-carts { display: grid; gap: 8px; margin-top: 10px; }
+
+.wc-staff-pos-held-cart-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--wc-pos-border);
+  border-radius: 10px;
+  background: var(--wc-pos-card);
+}
+.wc-staff-pos-held-cart-info  { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.wc-staff-pos-held-cart-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ---- Receipt ---- */
+.wc-staff-pos-receipt {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px dashed var(--wc-pos-border);
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.wc-staff-pos-receipt-store {
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.wc-staff-pos-receipt-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #586574;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.wc-staff-pos-receipt-hr {
+  border: none;
+  border-top: 1px dashed var(--wc-pos-border);
+  margin: 10px 0;
+}
+.wc-staff-pos-receipt-items  { display: grid; gap: 4px; }
+.wc-staff-pos-receipt-item   { display: flex; justify-content: space-between; gap: 8px; }
+.wc-staff-pos-receipt-totals { display: grid; gap: 4px; margin-top: 4px; }
+.wc-staff-pos-receipt-totals > div { display: flex; justify-content: space-between; gap: 8px; }
+.wc-staff-pos-receipt-totals .is-total { font-weight: 700; font-size: 15px; margin-top: 4px; }
+.wc-staff-pos-receipt-tender { margin-top: 10px; font-weight: 600; text-align: center; }
+.wc-staff-pos-receipt-print-actions { margin-top: 12px; text-align: center; }
+
 /* ---- Responsive ---- */
 @media (max-width: 1280px) {
   .wc-staff-pos-grid    { grid-template-columns: 1fr; }
   .wc-staff-pos-actions { grid-template-columns: 1fr; }
+}
+
+/* ---- Print styles ---- */
+@media print {
+  /* Hide everything except the receipt */
+  body > *                    { display: none !important; }
+  .wc-staff-pos-wrap          { display: block !important; }
+  .wc-staff-pos-app           { display: block !important; }
+  .wc-staff-pos-header,
+  .wc-staff-pos-banner,
+  .wc-staff-pos-notices,
+  .wc-staff-pos-grid > *:not(:last-child),
+  .wc-staff-pos-cart-header,
+  .wc-staff-pos-cart-list,
+  .wc-staff-pos-coupon-row,
+  .wc-staff-pos-applied-coupons,
+  .wc-staff-pos-discount-row,
+  .wc-staff-pos-active-discount,
+  .wc-staff-pos-totals,
+  .wc-staff-pos-field,
+  .wc-staff-pos-actions,
+  .wc-staff-pos-order-result-header,
+  .wc-staff-pos-order-result-links,
+  .wc-staff-pos-receipt-print-actions,
+  .wc-staff-pos-new-transaction-btn { display: none !important; }
+
+  .wc-staff-pos-order-result { display: block !important; border: none !important; padding: 0 !important; }
+  .wc-staff-pos-receipt       { border: none !important; padding: 0 !important; margin: 0 !important; display: block !important; }
 }
