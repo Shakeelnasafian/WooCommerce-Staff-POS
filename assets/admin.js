@@ -156,6 +156,7 @@
     var statusClass = o.status === 'completed' || o.status === 'processing'
       ? 'wc-staff-pos-badge is-success'
       : 'wc-staff-pos-badge is-warning';
+    var canRefund = (o.status === 'completed' || o.status === 'processing') && props.onRefundClick;
     return h('div', { className: 'wc-staff-pos-history-row' },
       h('div', { className: 'wc-staff-pos-history-row-main' },
         h('strong', null, '#' + o.number + ' \u2013 ' + o.customerName),
@@ -169,9 +170,99 @@
           h('a', { href: o.editUrl, target: '_blank', rel: 'noreferrer', className: 'button button-small' }, 'View'),
           o.paymentUrl
             ? h('a', { href: o.paymentUrl, target: '_blank', rel: 'noreferrer', className: 'button button-small button-secondary' }, 'Pay')
+            : null,
+          canRefund
+            ? h('button', {
+                type: 'button', className: 'button button-small',
+                onClick: function () { props.onRefundClick(o); }
+              }, 'Refund')
             : null
         )
       )
+    );
+  }
+
+  /* ---- Inline refund form ---- */
+  function RefundPanel(props) {
+    var o = props.order;
+    return h('div', { className: 'wc-staff-pos-refund-panel' },
+      h('h4', null, 'Refund order #' + o.number + ' \u2013 ' + o.customerName),
+      h(Field, { label: 'Amount' },
+        h('input', {
+          type: 'number', min: '0.01', step: '0.01', value: props.amount,
+          onChange: function (e) { props.onAmountChange(e.target.value); }
+        })
+      ),
+      h(Field, { label: 'Reason (optional)' },
+        h('textarea', {
+          className: 'wc-staff-pos-textarea', rows: 2, value: props.reason,
+          onChange: function (e) { props.onReasonChange(e.target.value); }
+        })
+      ),
+      h('div', { className: 'wc-staff-pos-refund-actions' },
+        h('button', {
+          type: 'button', className: 'button button-primary',
+          disabled: !props.amount || props.busy,
+          onClick: props.onConfirm
+        }, props.busy ? 'Processing\u2026' : 'Process refund'),
+        h('button', {
+          type: 'button', className: 'button button-secondary',
+          disabled: props.busy,
+          onClick: props.onCancel
+        }, 'Cancel')
+      )
+    );
+  }
+
+  /* ---- Daily report ---- */
+  function DailyReport(props) {
+    var r = props.report;
+    if (!r) return null;
+    return h('div', { className: 'wc-staff-pos-report' },
+      h('div', { className: 'wc-staff-pos-report-grid' },
+        h('div', { className: 'wc-staff-pos-report-card' },
+          h('div', { className: 'wc-staff-pos-report-card-value' }, r.orderCount),
+          h('div', { className: 'wc-staff-pos-report-card-label' }, 'Orders')
+        ),
+        h('div', { className: 'wc-staff-pos-report-card' },
+          h('div', { className: 'wc-staff-pos-report-card-value' }, htmlNode(r.totalRevenueHtml)),
+          h('div', { className: 'wc-staff-pos-report-card-label' }, 'Revenue (paid)')
+        )
+      ),
+      r.tenderBreakdown && r.tenderBreakdown.length
+        ? h('div', null,
+            h('h4', null, 'By payment method'),
+            h('table', { className: 'wc-staff-pos-report-table' },
+              h('thead', null, h('tr', null,
+                h('th', null, 'Method'), h('th', null, 'Orders'), h('th', null, 'Total')
+              )),
+              h('tbody', null,
+                r.tenderBreakdown.map(function (t, i) {
+                  return h('tr', { key: 'tender-' + i },
+                    h('td', null, t.label), h('td', null, t.count), h('td', null, htmlNode(t.totalHtml))
+                  );
+                })
+              )
+            )
+          )
+        : null,
+      r.cashierBreakdown && r.cashierBreakdown.length > 1
+        ? h('div', null,
+            h('h4', null, 'By cashier'),
+            h('table', { className: 'wc-staff-pos-report-table' },
+              h('thead', null, h('tr', null,
+                h('th', null, 'Cashier'), h('th', null, 'Orders'), h('th', null, 'Total')
+              )),
+              h('tbody', null,
+                r.cashierBreakdown.map(function (t, i) {
+                  return h('tr', { key: 'cashier-' + i },
+                    h('td', null, t.name), h('td', null, t.count), h('td', null, htmlNode(t.totalHtml))
+                  );
+                })
+              )
+            )
+          )
+        : null
     );
   }
 
@@ -227,6 +318,23 @@
 
     // Receipt visibility
     var _rv = useState(false), showReceipt = _rv[0], setShowReceipt = _rv[1];
+
+    // History filters (server-side: status, tender, date; client-side: text query)
+    var _hq = useState(''), historyQuery = _hq[0], setHistoryQuery = _hq[1];
+    var _hs = useState(''), historyStatus = _hs[0], setHistoryStatus = _hs[1];
+    var _htt = useState(''), historyTenderFilter = _htt[0], setHistoryTenderFilter = _htt[1];
+    var _hdf = useState(''), historyDateFrom = _hdf[0], setHistoryDateFrom = _hdf[1];
+    var _hdt = useState(''), historyDateTo = _hdt[0], setHistoryDateTo = _hdt[1];
+
+    // Refund
+    var _ro = useState(null), refundTarget = _ro[0], setRefundTarget = _ro[1];
+    var _ram = useState(''), refundAmount = _ram[0], setRefundAmount = _ram[1];
+    var _rrs = useState(''), refundReason = _rrs[0], setRefundReason = _rrs[1];
+
+    // Daily report
+    var _rep = useState(null), report = _rep[0], setReport = _rep[1];
+    var _repd = useState(''), reportDate = _repd[0], setReportDate = _repd[1];
+    var _repl = useState(false), reportLoading = _repl[0], setReportLoading = _repl[1];
 
     // Ref to trigger auto-add after product details load (barcode scanner flow)
     var autoAddRef = useRef(false);
@@ -352,15 +460,20 @@
         .catch(function (err) { setFeedback(err.message || 'Failed to load product details.'); });
     }, [selectedProductId]);
 
-    /* ---- Load order history when panel switches ---- */
+    /* ---- Load order history when panel switches or server-side filters change ---- */
     useEffect(function () {
       if (viewMode !== 'history') return;
       setHistoryLoading(true);
-      request('/orders?limit=30')
+      var url = '/orders?limit=50';
+      if (historyStatus) url += '&status=' + encodeURIComponent(historyStatus);
+      if (historyTenderFilter) url += '&tender_type=' + encodeURIComponent(historyTenderFilter);
+      if (historyDateFrom) url += '&date_from=' + encodeURIComponent(historyDateFrom);
+      if (historyDateTo) url += '&date_to=' + encodeURIComponent(historyDateTo);
+      request(url)
         .then(function (res) { setHistoryOrders(res.items || []); })
         .catch(function (err) { setFeedback(err.message || 'Failed to load order history.'); })
         .finally(function () { setHistoryLoading(false); });
-    }, [viewMode]);
+    }, [viewMode, historyStatus, historyTenderFilter, historyDateFrom, historyDateTo]);
 
     /* ---- Load held carts when panel switches ---- */
     useEffect(function () {
@@ -371,6 +484,12 @@
         .catch(function (err) { setFeedback(err.message || 'Failed to load held carts.'); })
         .finally(function () { setHeldCartsLoading(false); });
     }, [viewMode]);
+
+    /* ---- Load daily report when the reports tab is opened ---- */
+    useEffect(function () {
+      if (viewMode !== 'reports') return;
+      loadDailyReport(reportDate);
+    }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /* ======================================================
        Handlers
@@ -625,11 +744,60 @@
       setFeedback('');
     }
 
+    function loadDailyReport(date) {
+      setReportLoading(true);
+      var url = '/reports/daily' + (date ? '?date=' + encodeURIComponent(date) : '');
+      request(url)
+        .then(function (res) {
+          setReport(res);
+          if (res.date) setReportDate(res.date);
+        })
+        .catch(function (err) { setFeedback(err.message || 'Failed to load report.'); })
+        .finally(function () { setReportLoading(false); });
+    }
+
+    function handleRefund() {
+      if (!refundTarget) return;
+      var amount = parseFloat(refundAmount);
+      if (isNaN(amount) || amount <= 0) { setFeedback('Enter a valid refund amount.'); return; }
+      var capturedId = refundTarget.id;
+      var capturedNumber = refundTarget.number;
+      startBusy('refund-' + capturedId);
+      request('/orders/' + capturedId + '/refund', {
+        method: 'POST',
+        data: { amount: amount, reason: refundReason }
+      })
+        .then(function (res) {
+          setHistoryOrders(function (cur) {
+            return cur.map(function (o) {
+              if (o.id === capturedId) return Object.assign({}, o, { status: res.order.status });
+              return o;
+            });
+          });
+          setFeedback('Refund processed for order #' + capturedNumber + '.');
+          setRefundTarget(null);
+          setRefundAmount('');
+          setRefundReason('');
+        })
+        .catch(function (err) { setFeedback(err.message || 'Refund could not be processed.'); })
+        .finally(function () { stopBusy('refund-' + capturedId); });
+    }
+
     var tenderOptions = bootstrap && bootstrap.manualTenderTypes && bootstrap.manualTenderTypes.length
       ? bootstrap.manualTenderTypes
       : [{ value: 'cash', label: 'Cash' }, { value: 'card', label: 'Card' }, { value: 'manual', label: 'Manual' }];
 
     var activeDiscount = cart && cart.cartDiscount ? cart.cartDiscount : null;
+
+    var filteredHistoryOrders = useMemo(function () {
+      if (!historyQuery) return historyOrders;
+      var q = historyQuery.toLowerCase();
+      return historyOrders.filter(function (o) {
+        return (o.customerName || '').toLowerCase().indexOf(q) >= 0 ||
+               (o.email || '').toLowerCase().indexOf(q) >= 0 ||
+               String(o.number || '').indexOf(q) >= 0;
+      });
+    }, [historyOrders, historyQuery]);
 
     var hasCartItems = cart && cart.items && cart.items.length > 0;
 
@@ -757,7 +925,12 @@
               type: 'button',
               className: classNames('wc-staff-pos-tab', viewMode === 'held-carts' && 'is-active'),
               onClick: function () { setViewMode('held-carts'); }
-            }, heldCarts.length ? 'Held carts (' + heldCarts.length + ')' : 'Held carts')
+            }, heldCarts.length ? 'Held carts (' + heldCarts.length + ')' : 'Held carts'),
+            h('button', {
+              type: 'button',
+              className: classNames('wc-staff-pos-tab', viewMode === 'reports' && 'is-active'),
+              onClick: function () { setViewMode('reports'); }
+            }, 'Daily report')
           ),
 
           /* ---- Products view ---- */
@@ -881,12 +1054,78 @@
 
           /* ---- History view ---- */
           viewMode === 'history'
-            ? h('div', { className: 'wc-staff-pos-history' },
-                historyLoading
-                  ? h('p', { className: 'wc-staff-pos-empty-state' }, 'Loading orders\u2026')
-                  : historyOrders.length
-                    ? historyOrders.map(function (o) { return h(OrderRow, { key: 'order-' + o.id, order: o }); })
-                    : h('p', { className: 'wc-staff-pos-empty-state' }, 'No POS orders found.')
+            ? h('div', null,
+                /* Filter bar */
+                h('div', { className: 'wc-staff-pos-history-filters' },
+                  h('input', {
+                    className: 'wc-staff-pos-search',
+                    type: 'search',
+                    placeholder: 'Filter by customer name, email, or order #',
+                    value: historyQuery,
+                    onChange: function (e) { setHistoryQuery(e.target.value); }
+                  }),
+                  h('div', { className: 'wc-staff-pos-history-filter-row' },
+                    h('select', {
+                      value: historyStatus,
+                      onChange: function (e) { setHistoryStatus(e.target.value); }
+                    },
+                      h('option', { value: '' }, 'All statuses'),
+                      h('option', { value: 'completed' }, 'Completed'),
+                      h('option', { value: 'processing' }, 'Processing'),
+                      h('option', { value: 'pending' }, 'Pending'),
+                      h('option', { value: 'refunded' }, 'Refunded')
+                    ),
+                    h('select', {
+                      value: historyTenderFilter,
+                      onChange: function (e) { setHistoryTenderFilter(e.target.value); }
+                    },
+                      [h('option', { key: 'all-tender', value: '' }, 'All methods')].concat(
+                        tenderOptions.map(function (t) {
+                          return h('option', { key: t.value, value: t.value }, t.label);
+                        })
+                      )
+                    ),
+                    h('input', {
+                      type: 'date', value: historyDateFrom, title: 'From date',
+                      onChange: function (e) { setHistoryDateFrom(e.target.value); }
+                    }),
+                    h('input', {
+                      type: 'date', value: historyDateTo, title: 'To date',
+                      onChange: function (e) { setHistoryDateTo(e.target.value); }
+                    })
+                  )
+                ),
+                /* Inline refund form */
+                refundTarget
+                  ? h(RefundPanel, {
+                      order: refundTarget,
+                      amount: refundAmount,
+                      reason: refundReason,
+                      busy: isBusy('refund-' + refundTarget.id),
+                      onAmountChange: setRefundAmount,
+                      onReasonChange: setRefundReason,
+                      onConfirm: handleRefund,
+                      onCancel: function () { setRefundTarget(null); setRefundAmount(''); setRefundReason(''); }
+                    })
+                  : null,
+                /* Order list */
+                h('div', { className: 'wc-staff-pos-history' },
+                  historyLoading
+                    ? h('p', { className: 'wc-staff-pos-empty-state' }, 'Loading orders\u2026')
+                    : filteredHistoryOrders.length
+                      ? filteredHistoryOrders.map(function (o) {
+                          return h(OrderRow, {
+                            key: 'order-' + o.id,
+                            order: o,
+                            onRefundClick: function (order) {
+                              setRefundTarget(order);
+                              setRefundAmount(String(order.total || ''));
+                              setRefundReason('');
+                            }
+                          });
+                        })
+                      : h('p', { className: 'wc-staff-pos-empty-state' }, 'No POS orders found.')
+                )
               )
             : null,
 
@@ -907,7 +1146,7 @@
                               type: 'button', className: 'button button-primary button-small',
                               disabled: anyBusy,
                               onClick: function () { handleRestoreHeldCart(hc.id); }
-                            }, isBusy('restore-cart-') + hc.id ? 'Restoring\u2026' : 'Restore'),
+                            }, isBusy('restore-cart-' + hc.id) ? 'Restoring\u2026' : 'Restore'),
                             h('button', {
                               type: 'button', className: 'button button-link-delete button-small',
                               'aria-label': 'Delete held cart ' + hc.name,
@@ -917,6 +1156,28 @@
                         );
                       })
                     : h('p', { className: 'wc-staff-pos-empty-state' }, 'No held carts. Use \u201cHold cart\u201d in the cart panel to park a cart and start a new one.')
+              )
+            : null,
+
+          /* ---- Daily report view ---- */
+          viewMode === 'reports'
+            ? h('div', { className: 'wc-staff-pos-report-view' },
+                h('div', { className: 'wc-staff-pos-history-filter-row' },
+                  h('input', {
+                    type: 'date', value: reportDate,
+                    onChange: function (e) { setReportDate(e.target.value); }
+                  }),
+                  h('button', {
+                    type: 'button', className: 'button button-secondary',
+                    disabled: reportLoading,
+                    onClick: function () { loadDailyReport(reportDate); }
+                  }, reportLoading ? 'Loading\u2026' : 'Load report')
+                ),
+                reportLoading && !report
+                  ? h('p', { className: 'wc-staff-pos-empty-state' }, 'Loading\u2026')
+                  : report
+                    ? h(DailyReport, { report: report })
+                    : h('p', { className: 'wc-staff-pos-empty-state' }, 'Select a date and click \u201cLoad report\u201d.')
               )
             : null
         ),

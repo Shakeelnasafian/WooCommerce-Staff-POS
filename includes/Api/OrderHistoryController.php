@@ -26,8 +26,12 @@ final class OrderHistoryController extends Controller
 
 	public function get_items(WP_REST_Request $request): array
 	{
-		$limit      = max(1, min(50, (int) ($request->get_param('limit') ?: 25)));
-		$cashier_id = absint($request->get_param('cashier_id'));
+		$limit       = max(1, min(100, (int) ($request->get_param('limit') ?: 50)));
+		$cashier_id  = absint($request->get_param('cashier_id'));
+		$status      = sanitize_key((string) ($request->get_param('status') ?: ''));
+		$tender_type = sanitize_key((string) ($request->get_param('tender_type') ?: ''));
+		$date_from   = sanitize_text_field((string) ($request->get_param('date_from') ?: ''));
+		$date_to     = sanitize_text_field((string) ($request->get_param('date_to') ?: ''));
 
 		$query_args = [
 			'limit'      => $limit,
@@ -47,6 +51,32 @@ final class OrderHistoryController extends Controller
 				'key'   => '_wc_staff_pos_cashier_user_id',
 				'value' => (string) $cashier_id,
 			];
+		}
+
+		// Status filter — validated against registered WC statuses.
+		if ('' !== $status) {
+			$valid_statuses = array_keys(wc_get_order_statuses());
+
+			if (in_array('wc-' . $status, $valid_statuses, true)) {
+				$query_args['status'] = $status;
+			}
+		}
+
+		// Tender type filter.
+		if ('' !== $tender_type) {
+			$query_args['meta_query'][] = [
+				'key'   => '_wc_staff_pos_tender_type',
+				'value' => $tender_type,
+			];
+		}
+
+		// Date range filter (site-timezone dates, WC resolves the range).
+		if ('' !== $date_from && '' !== $date_to) {
+			$query_args['date_created'] = $date_from . '...' . $date_to;
+		} elseif ('' !== $date_from) {
+			$query_args['date_created'] = '>=' . $date_from;
+		} elseif ('' !== $date_to) {
+			$query_args['date_created'] = '<=' . $date_to;
 		}
 
 		$orders = wc_get_orders($query_args);

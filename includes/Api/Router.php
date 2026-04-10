@@ -44,6 +44,8 @@ final class Router
 			new HeldCartsController($this->cart_context),
 			new OrdersController($this->cart_context, $this->order_service),
 			new OrderHistoryController(),
+			new RefundsController(),
+			new ReportsController(),
 		];
 
 		foreach ($controllers as $controller) {

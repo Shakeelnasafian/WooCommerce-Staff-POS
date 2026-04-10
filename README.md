@@ -100,8 +100,16 @@ All endpoints require the `wc_staff_pos` capability and a valid nonce (`X-WP-Non
 | `DELETE` | `/wc-pos/v1/cart` | Clear entire cart |
 | `POST` | `/wc-pos/v1/cart/coupons` | Apply coupon |
 | `DELETE` | `/wc-pos/v1/cart/coupons/{code}` | Remove coupon |
+| `POST` | `/wc-pos/v1/cart/discount` | Apply cart-level discount (`percent` or `fixed`) |
+| `DELETE` | `/wc-pos/v1/cart/discount` | Remove cart discount |
+| `GET` | `/wc-pos/v1/held-carts` | List held (parked) carts |
+| `POST` | `/wc-pos/v1/held-carts` | Save current cart as a held slot |
+| `POST` | `/wc-pos/v1/held-carts/{id}/restore` | Restore a held cart into the active session |
+| `DELETE` | `/wc-pos/v1/held-carts/{id}` | Delete a held cart slot |
 | `POST` | `/wc-pos/v1/orders` | Create order (`payment_link` or `manual_paid` mode) |
-| `GET` | `/wc-pos/v1/orders` | Recent POS order history |
+| `GET` | `/wc-pos/v1/orders` | POS order history (`status`, `tender_type`, `date_from`, `date_to`, `limit` params) |
+| `POST` | `/wc-pos/v1/orders/{id}/refund` | Issue a partial or full refund on a POS order |
+| `GET` | `/wc-pos/v1/reports/daily` | Daily sales summary (`date` param, defaults to today) |
 
 ---
 
@@ -111,6 +119,7 @@ All endpoints require the `wc_staff_pos` capability and a valid nonce (`X-WP-Non
 woocommerce-staff-pos.php        Plugin bootstrap, HPOS declaration
 includes/
   Admin/Page.php                 Admin menu + asset enqueue
+  Admin/SettingsPage.php         Settings page (roles, tender types)
   Plugin.php                     Service wiring, capability sync, cart price hook
   Api/
     Router.php                   Registers all REST controllers
@@ -119,9 +128,13 @@ includes/
     ProductsController.php       Product list + detail
     CategoriesController.php     Category list
     CartController.php           Cart CRUD + coupons
+    CartDiscountController.php   Cart-level discount (percent / fixed)
+    HeldCartsController.php      Park and restore carts
     CustomersController.php      Customer search + create
     OrdersController.php         Order creation
-    OrderHistoryController.php   Order history
+    OrderHistoryController.php   Order history (with status/date/tender filters)
+    RefundsController.php        Issue refunds on POS orders
+    ReportsController.php        Daily sales summary
   Domain/
     PosCartContext.php           Per-user cart session isolation
     OrderService.php             Order build logic (direct wc_create_order flow)
@@ -148,7 +161,7 @@ The following items are planned to bring this plugin to production-ready status.
 ### 🟠 High Priority
 
 - [ ] **Split tender** — Allow a single order to be paid with multiple payment methods (e.g. part cash, part card)
-- [ ] **Refunds / returns** — Initiate a WooCommerce refund from the POS order history panel
+- [x] **Refunds / returns** — Initiate a WooCommerce refund from the POS order history panel
 - [x] **Held / parked carts** — Save the current cart under a named slot and restore it later; dedicated "Held carts" tab shows all parked carts with restore/delete actions
 - [ ] **Barcode label printing** — Print product barcodes directly from the product detail panel
 - [x] **Discount by percentage or fixed amount** — Apply a cart-level percentage or fixed discount via a WooCommerce fee; discount persists across cart operations and is shown as a chip
@@ -160,8 +173,8 @@ The following items are planned to bring this plugin to production-ready status.
 - [ ] **Customer loyalty / notes** — Show customer lifetime value, order count, and any internal notes on the customer panel
 - [ ] **Product quick-add buttons** — Pin frequently sold products to a fast-access grid that bypasses search
 - [ ] **Configurable tax display** — Toggle inc/exc tax display per cashier preference
-- [ ] **Order search in history** — Search and filter the order history by customer, date range, or tender type
-- [ ] **End-of-day sales report** — Summary of POS orders for the current day (count, total, breakdown by tender type)
+- [x] **Order search in history** — Search and filter the order history by customer, date range, or tender type
+- [x] **End-of-day sales report** — Summary of POS orders for the current day (count, total, breakdown by tender type)
 
 ### 🟢 Polish & Infrastructure
 

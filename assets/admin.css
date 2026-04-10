@@ -564,6 +564,82 @@
 .wc-staff-pos-receipt-tender { margin-top: 10px; font-weight: 600; text-align: center; }
 .wc-staff-pos-receipt-print-actions { margin-top: 12px; text-align: center; }
 
+/* ---- History filter bar ---- */
+.wc-staff-pos-history-filters { margin-bottom: 12px; display: grid; gap: 8px; }
+
+.wc-staff-pos-history-filter-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.wc-staff-pos-history-filter-row select,
+.wc-staff-pos-history-filter-row input[type="date"] {
+  border: 1px solid var(--wc-pos-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: #fff;
+  font-family: inherit;
+}
+
+/* ---- Refund panel ---- */
+.wc-staff-pos-refund-panel {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid #f5b9b9;
+  border-radius: 12px;
+  background: #fdf3f3;
+  display: grid;
+  gap: 10px;
+}
+.wc-staff-pos-refund-panel h4 { margin: 0; font-size: 13px; color: #7b1e1e; }
+.wc-staff-pos-refund-actions  { display: flex; gap: 8px; }
+
+/* ---- Daily report ---- */
+.wc-staff-pos-report-view  { display: grid; gap: 14px; }
+.wc-staff-pos-report       { display: grid; gap: 16px; }
+.wc-staff-pos-report h4    { margin: 0 0 8px; font-size: 13px; }
+
+.wc-staff-pos-report-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.wc-staff-pos-report-card {
+  padding: 16px;
+  border: 1px solid var(--wc-pos-border);
+  border-radius: 12px;
+  background: var(--wc-pos-accent-soft);
+  text-align: center;
+}
+.wc-staff-pos-report-card-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--wc-pos-accent);
+}
+.wc-staff-pos-report-card-label { font-size: 12px; color: #586574; margin-top: 4px; }
+
+.wc-staff-pos-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.wc-staff-pos-report-table th,
+.wc-staff-pos-report-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--wc-pos-border);
+  text-align: left;
+}
+.wc-staff-pos-report-table th {
+  font-weight: 700;
+  color: #586574;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.wc-staff-pos-report-table td:last-child,
+.wc-staff-pos-report-table th:last-child { text-align: right; }
+
 /* ---- Responsive ---- */
 @media (max-width: 1280px) {
   .wc-staff-pos-grid    { grid-template-columns: 1fr; }
