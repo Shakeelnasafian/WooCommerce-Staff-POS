@@ -879,7 +879,7 @@
           ),
 
           !guestMode
-            ? h(null, null,
+            ? h(element.Fragment, null,
                 h('input', {
                   className: 'wc-staff-pos-search',
                   type: 'search',
@@ -965,7 +965,7 @@
 
           /* ---- Products view ---- */
           viewMode === 'products'
-            ? h(null, null,
+            ? h(element.Fragment, null,
                 /* Category filter chips */
                 categories.length > 0
                   ? h('div', { className: 'wc-staff-pos-category-bar' },
