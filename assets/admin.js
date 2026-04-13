@@ -110,21 +110,38 @@
 
   function ProductCard(props) {
     var p = props.product;
-    return h('button', {
-      type: 'button',
-      className: classNames('wc-staff-pos-product-card', props.active && 'is-active', !p.inStock && 'is-out-of-stock'),
-      onClick: function () { props.onSelect(p.id); }
+    var canQuickAdd = p.isSupported && p.inStock && p.type === 'simple';
+    return h('div', {
+      className: classNames('wc-staff-pos-product-card', props.active && 'is-active', !p.inStock && 'is-out-of-stock')
     },
-      p.image ? h('img', { src: p.image, alt: '', className: 'wc-staff-pos-product-image', 'aria-hidden': 'true' }) : null,
-      h('div', { className: 'wc-staff-pos-product-card-body' },
-        h('strong', null, p.name),
-        p.sku ? h('span', { className: 'wc-staff-pos-meta' }, 'SKU: ' + p.sku) : null,
-        h('span', { className: 'wc-staff-pos-price' }, htmlNode(p.priceHtml || '')),
-        h('div', { className: 'wc-staff-pos-product-card-badges' },
-          !p.inStock ? h('span', { className: 'wc-staff-pos-badge is-warning' }, 'Out of stock') : null,
-          !p.isSupported ? h('span', { className: 'wc-staff-pos-badge is-warning' }, 'Unsupported') : null
+      h('button', {
+        type: 'button', className: 'wc-staff-pos-product-card-select',
+        onClick: function () { props.onSelect(p.id); },
+        'aria-label': 'Select ' + p.name
+      },
+        p.image
+          ? h('img', { src: p.image, alt: '', className: 'wc-staff-pos-product-image', 'aria-hidden': 'true' })
+          : h('div', { className: 'wc-staff-pos-product-image wc-staff-pos-product-image-placeholder' }, '\ud83d\udce6'),
+        h('div', { className: 'wc-staff-pos-product-card-body' },
+          h('strong', null, p.name),
+          p.sku ? h('span', { className: 'wc-staff-pos-meta' }, 'SKU: ' + p.sku) : null,
+          h('span', { className: 'wc-staff-pos-price' }, htmlNode(p.priceHtml || '')),
+          h('div', { className: 'wc-staff-pos-product-card-badges' },
+            !p.inStock ? h('span', { className: 'wc-staff-pos-badge is-warning' }, 'Out of stock') : null,
+            p.type === 'variable' ? h('span', { className: 'wc-staff-pos-badge is-success' }, 'Variable') : null,
+            !p.isSupported ? h('span', { className: 'wc-staff-pos-badge is-warning' }, 'Unsupported') : null
+          )
         )
-      )
+      ),
+      canQuickAdd
+        ? h('button', {
+            type: 'button',
+            className: 'wc-staff-pos-quick-add-btn',
+            title: 'Add to cart',
+            'aria-label': 'Quick add ' + p.name + ' to cart',
+            onClick: function (e) { e.stopPropagation(); props.onQuickAdd(p.id); }
+          }, '+')
+        : null
     );
   }
 
@@ -135,17 +152,31 @@
     // Keep local qty in sync when the server-side cart updates the item.
     useEffect(function () { setLocalQty(item.quantity); }, [item.quantity]);
 
-    function commitQty() {
-      var next = Number(localQty);
+    function commitQty(nextVal) {
+      var next = Number(nextVal !== undefined ? nextVal : localQty);
       if (!isNaN(next) && next !== item.quantity) {
         props.onQuantityChange(item.key, next);
       }
     }
 
+    function decrement() {
+      var next = Math.max(0, Number(localQty) - 1);
+      setLocalQty(next);
+      props.onQuantityChange(item.key, next);
+    }
+
+    function increment() {
+      var next = Number(localQty) + 1;
+      setLocalQty(next);
+      props.onQuantityChange(item.key, next);
+    }
+
     return h('div', { className: 'wc-staff-pos-cart-item' },
       h('div', { className: 'wc-staff-pos-cart-item-main' },
-        h('strong', null, item.name),
-        item.customPrice ? h('span', { className: 'wc-staff-pos-custom-price-chip' }, 'Custom price') : null,
+        h('div', { className: 'wc-staff-pos-cart-item-name-row' },
+          h('strong', null, item.name),
+          item.customPrice ? h('span', { className: 'wc-staff-pos-custom-price-chip' }, 'Custom price') : null
+        ),
         item.attributes && item.attributes.length
           ? h('div', { className: 'wc-staff-pos-cart-attributes' },
               item.attributes.map(function (a, i) {
@@ -155,14 +186,26 @@
           : null
       ),
       h('div', { className: 'wc-staff-pos-cart-item-controls' },
-        h('input', {
-          type: 'number', min: 0, value: localQty,
-          onChange: function (e) { setLocalQty(e.target.value); },
-          onBlur: commitQty,
-          onKeyDown: function (e) { if (e.key === 'Enter') { e.target.blur(); } }
-        }),
+        h('div', { className: 'wc-staff-pos-qty-stepper' },
+          h('button', {
+            type: 'button', className: 'wc-staff-pos-qty-btn',
+            'aria-label': 'Decrease quantity',
+            onClick: decrement
+          }, '\u2212'),
+          h('input', {
+            type: 'number', min: 0, value: localQty,
+            onChange: function (e) { setLocalQty(e.target.value); },
+            onBlur: function () { commitQty(); },
+            onKeyDown: function (e) { if (e.key === 'Enter') { e.target.blur(); } }
+          }),
+          h('button', {
+            type: 'button', className: 'wc-staff-pos-qty-btn',
+            'aria-label': 'Increase quantity',
+            onClick: increment
+          }, '+')
+        ),
         h('span', { className: 'wc-staff-pos-price' }, htmlNode(item.lineTotalHtml || '')),
-        h('button', { type: 'button', className: 'button button-link-delete', onClick: function () { props.onRemove(item.key); } }, 'Remove')
+        h('button', { type: 'button', className: 'button button-link-delete wc-staff-pos-remove-btn', onClick: function () { props.onRemove(item.key); } }, '\u00d7')
       )
     );
   }
@@ -335,6 +378,9 @@
 
     // Receipt visibility
     var _rv = useState(false), showReceipt = _rv[0], setShowReceipt = _rv[1];
+
+    // Cash change calculator
+    var _cr = useState(''), cashReceived = _cr[0], setCashReceived = _cr[1];
 
     // History filters (server-side: status, tender, date; client-side: text query)
     var _hq = useState(''), historyQuery = _hq[0], setHistoryQuery = _hq[1];
@@ -565,6 +611,20 @@
       });
     }
 
+    function handleQuickAdd(productId) {
+      startBusy('add-to-cart');
+      request('/cart/items', {
+        method: 'POST',
+        data: { product_id: productId, quantity: 1, variation_id: 0, selected_attributes: {} }
+      })
+        .then(function (res) {
+          syncCart(res.cart);
+          setFeedback('\u2713 Added to cart.');
+        })
+        .catch(function (err) { setFeedback(err.message || 'Product could not be added.'); })
+        .finally(function () { stopBusy('add-to-cart'); });
+    }
+
     function handleAddToCart() {
       if (!selectedProduct) return;
       startBusy('add-to-cart');
@@ -758,6 +818,7 @@
       setOrderNote('');
       setCouponCode('');
       setDiscountValue('');
+      setCashReceived('');
       setFeedback('');
     }
 
@@ -995,14 +1056,17 @@
                 }),
 
                 h('div', { className: 'wc-staff-pos-product-list' },
-                  products.map(function (product) {
-                    return h(ProductCard, {
-                      key: 'product-' + product.id,
-                      product: product,
-                      active: selectedProductId === product.id,
-                      onSelect: setSelectedProductId
-                    });
-                  })
+                  products.length === 0
+                    ? h('p', { className: 'wc-staff-pos-empty-state' }, productQuery ? 'No products found for \u201c' + productQuery + '\u201d.' : 'No products available.')
+                    : products.map(function (product) {
+                        return h(ProductCard, {
+                          key: 'product-' + product.id,
+                          product: product,
+                          active: selectedProductId === product.id,
+                          onSelect: setSelectedProductId,
+                          onQuickAdd: handleQuickAdd
+                        });
+                      })
                 ),
 
                 selectedProduct
@@ -1168,8 +1232,9 @@
                     ? heldCarts.map(function (hc) {
                         return h('div', { key: 'hc-' + hc.id, className: 'wc-staff-pos-held-cart-row' },
                           h('div', { className: 'wc-staff-pos-held-cart-info' },
-                            h('strong', null, hc.name),
-                            h('span', { className: 'wc-staff-pos-meta' }, hc.itemCount + ' item(s) \u2013 ' + hc.createdAt)
+                            h('strong', null, hc.name || 'Unnamed cart'),
+                            h('span', { className: 'wc-staff-pos-meta' }, hc.itemCount + ' item(s) \u2013 ' + hc.createdAt),
+                            hc.totalHtml ? h('span', { className: 'wc-staff-pos-price' }, htmlNode(hc.totalHtml)) : null
                           ),
                           h('div', { className: 'wc-staff-pos-held-cart-actions' },
                             h('button', {
@@ -1215,7 +1280,12 @@
         /* ========== CART PANEL ========== */
         h('section', { className: 'wc-staff-pos-panel' },
           h('div', { className: 'wc-staff-pos-cart-header' },
-            h('h2', null, 'Cart'),
+            h('div', { className: 'wc-staff-pos-cart-header-title' },
+              h('h2', null, 'Cart'),
+              cart && cart.itemCount > 0
+                ? h('span', { className: 'wc-staff-pos-cart-count-badge' }, cart.itemCount + ' item' + (cart.itemCount !== 1 ? 's' : ''))
+                : null
+            ),
             h('div', { className: 'wc-staff-pos-cart-header-actions' },
               hasCartItems
                 ? h('button', {
@@ -1314,10 +1384,38 @@
 
           /* Tender type */
           h(Field, { label: 'Payment method' },
-            h('select', { value: tenderType, onChange: function (e) { setTenderType(e.target.value); } },
+            h('select', { value: tenderType, onChange: function (e) { setTenderType(e.target.value); setCashReceived(''); } },
               tenderOptions.map(function (opt) { return h('option', { key: opt.value, value: opt.value }, opt.label); })
             )
           ),
+
+          /* Cash change calculator */
+          tenderType === 'cash'
+            ? h('div', { className: 'wc-staff-pos-cash-calculator' },
+                h(Field, { label: 'Cash received' },
+                  h('input', {
+                    type: 'number', min: '0', step: '0.01',
+                    className: 'wc-staff-pos-cash-input',
+                    placeholder: '0.00',
+                    value: cashReceived,
+                    onChange: function (e) { setCashReceived(e.target.value); }
+                  })
+                ),
+                cashReceived
+                  ? h('div', { className: classNames('wc-staff-pos-change-due', (parseFloat(cashReceived) - (cart.totals && cart.totals.total || 0)) < 0 && 'is-short') },
+                      h('span', null, 'Change due'),
+                      h('strong', null,
+                        (function () {
+                          var received = parseFloat(cashReceived) || 0;
+                          var total = (cart.totals && cart.totals.total) || 0;
+                          var change = received - total;
+                          return (config.currencySymbol || '$') + (change >= 0 ? change.toFixed(2) : '\u2212' + Math.abs(change).toFixed(2));
+                        })()
+                      )
+                    )
+                  : null
+              )
+            : null,
 
           /* Staff note */
           h(Field, { label: 'Staff note (optional)' },
@@ -1330,9 +1428,20 @@
           ),
 
           /* Actions */
-          h('div', { className: 'wc-staff-pos-actions' },
+          h('button', {
+            type: 'button', className: 'button button-primary wc-staff-pos-charge-btn',
+            disabled: !hasCartItems || anyBusy,
+            onClick: function () { handleCreateOrder('manual_paid', false); }
+          },
+            isBusy('manual_paid-create') ? 'Processing\u2026' : (
+              (cart.totals && cart.totals.totalHtml)
+                ? h('span', null, 'Charge ', htmlNode(cart.totals.totalHtml))
+                : 'Mark paid'
+            )
+          ),
+          h('div', { className: 'wc-staff-pos-actions-secondary' },
             h('button', {
-              type: 'button', className: 'button',
+              type: 'button', className: 'button button-secondary',
               disabled: !hasCartItems || anyBusy,
               onClick: function () { handleCreateOrder('payment_link', false); }
             }, 'Create order'),
@@ -1340,12 +1449,7 @@
               type: 'button', className: 'button button-secondary',
               disabled: !hasCartItems || anyBusy,
               onClick: function () { handleCreateOrder('payment_link', true); }
-            }, 'Send payment link'),
-            h('button', {
-              type: 'button', className: 'button button-primary',
-              disabled: !hasCartItems || anyBusy,
-              onClick: function () { handleCreateOrder('manual_paid', false); }
-            }, 'Mark paid')
+            }, 'Send payment link')
           ),
 
           /* Order result */
