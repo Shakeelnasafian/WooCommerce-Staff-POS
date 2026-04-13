@@ -82,7 +82,13 @@ final class Page
 
 		echo '<div class="wrap wc-staff-pos-wrap">';
 		echo '<h1 class="screen-reader-text">' . esc_html__('Staff POS', 'wc-staff-pos') . '</h1>';
-		echo '<div id="wc-staff-pos-root"></div>';
+		echo '<div id="wc-staff-pos-root">';
+		// Shown only until the React app mounts and replaces this content.
+		echo '<div class="wc-staff-pos-loading">';
+		echo '<span class="wc-staff-pos-spinner"></span>';
+		echo esc_html__('Loading Staff POS\xe2\x80\xa6', 'wc-staff-pos');
+		echo '</div>';
+		echo '</div>';
 		echo '</div>';
 	}
 }

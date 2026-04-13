@@ -2,6 +2,43 @@
   margin-top: 20px;
 }
 
+/* ---- Loading state (shown by PHP before React mounts, and during bootstrap) ---- */
+.wc-staff-pos-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px;
+  color: #586574;
+  font-size: 14px;
+}
+
+.wc-staff-pos-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #d9dce3;
+  border-top-color: #0b6b50;
+  border-radius: 50%;
+  animation: wc-staff-pos-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes wc-staff-pos-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Initialization error (shown when JS or React fails to load) ---- */
+.wc-staff-pos-init-error {
+  padding: 16px 20px;
+  margin: 20px 0;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  color: #856404;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .wc-staff-pos-app {
   --wc-pos-border: #d9dce3;
   --wc-pos-accent: #0b6b50;

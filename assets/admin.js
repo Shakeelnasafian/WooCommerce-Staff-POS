@@ -1,5 +1,22 @@
 (function (window, wp, config) {
+  function showInitError(msg) {
+    var r = window.document && window.document.getElementById('wc-staff-pos-root');
+    if (r) {
+      r.innerHTML =
+        '<div class="wc-staff-pos-init-error">' +
+        '<strong>Staff POS could not load.</strong> ' + msg +
+        '<br><small>Check the browser console (F12) for more details.</small>' +
+        '</div>';
+    }
+  }
+
   if (!window || !wp || !config) {
+    showInitError('Required configuration (wcStaffPosConfig) is missing. The page may need to be refreshed.');
+    return;
+  }
+
+  if (!wp.element || typeof wp.element.createElement !== 'function') {
+    showInitError('The WordPress element library (wp-element / React) did not load correctly. Try disabling other plugins to check for conflicts.');
     return;
   }
 
@@ -804,6 +821,19 @@
     /* ======================================================
        Render
     ====================================================== */
+
+    /* Show a full-page spinner while the initial bootstrap fetch is in flight
+       and no data has arrived yet.  Once bootstrap resolves (success or error)
+       this condition is false and the normal layout is rendered. */
+    if (loading && !bootstrap) {
+      return h('div', { className: 'wc-staff-pos-app' },
+        h('div', { className: 'wc-staff-pos-loading' },
+          h('span', { className: 'wc-staff-pos-spinner' }),
+          'Loading Staff POS\u2026'
+        )
+      );
+    }
+
     return h('div', { className: 'wc-staff-pos-app' },
 
       /* ---- Header ---- */
@@ -1358,9 +1388,17 @@
   var root = window.document.getElementById('wc-staff-pos-root');
   if (!root) return;
 
-  if (element.createRoot) {
-    element.createRoot(root).render(h(App));
-  } else {
-    element.render(h(App), root);
+  try {
+    if (element.createRoot) {
+      element.createRoot(root).render(h(App));
+    } else {
+      element.render(h(App), root);
+    }
+  } catch (err) {
+    root.innerHTML =
+      '<div class="wc-staff-pos-init-error">' +
+      '<strong>Staff POS failed to start.</strong> ' + (err && err.message ? err.message : String(err)) +
+      '<br><small>Check the browser console (F12) for more details.</small>' +
+      '</div>';
   }
 })(window, window.wp, window.wcStaffPosConfig);
