@@ -21,6 +21,17 @@ abstract class Controller
 			return true;
 		}
 
+		// Distinguish "not signed in" (cookie/nonce rejected, common with
+		// security or caching plugins) from "signed in but lacks capability"
+		// — same WP_Error otherwise makes debugging near-impossible.
+		if (! is_user_logged_in()) {
+			return new WP_Error(
+				'wc_staff_pos_not_authenticated',
+				__('Staff POS could not authenticate your session. A security or caching plugin may be blocking the REST nonce cookie.', 'wc-staff-pos'),
+				['status' => 401]
+			);
+		}
+
 		return new WP_Error(
 			'wc_staff_pos_forbidden',
 			__('You are not allowed to use Staff POS.', 'wc-staff-pos'),
