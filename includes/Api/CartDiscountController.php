@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WCStaffPOS\Api;
 
 use WCStaffPOS\Domain\PosCartContext;
+use WP_Error;
 use WP_REST_Request;
 
 /**
@@ -60,7 +61,7 @@ final class CartDiscountController extends Controller
 		);
 	}
 
-	public function set_discount(WP_REST_Request $request): array
+	public function set_discount(WP_REST_Request $request): array|WP_Error
 	{
 		$type  = sanitize_key((string) $request->get_param('type'));
 		$value = (float) $request->get_param('value');
@@ -81,7 +82,7 @@ final class CartDiscountController extends Controller
 		);
 	}
 
-	public function clear_discount(WP_REST_Request $request): array
+	public function clear_discount(WP_REST_Request $request): array|WP_Error
 	{
 		unset($request);
 

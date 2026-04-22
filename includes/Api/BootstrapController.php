@@ -6,6 +6,7 @@ namespace WCStaffPOS\Api;
 
 use WCStaffPOS\Domain\Adapters\ProductConfigurationAdapterInterface;
 use WCStaffPOS\Domain\PosCartContext;
+use WP_Error;
 use WP_REST_Request;
 
 final class BootstrapController extends Controller
@@ -59,9 +60,17 @@ final class BootstrapController extends Controller
 		];
 	}
 
-	public function get_bootstrap(WP_REST_Request $request): array
+	public function get_bootstrap(WP_REST_Request $request): array|WP_Error
 	{
 		unset($request);
+
+		$cart = $this->cart_context->run(
+			fn (): array => $this->cart_context->get_snapshot()
+		);
+
+		if (is_wp_error($cart)) {
+			return $cart;
+		}
 
 		return [
 			'currentUser'           => [
@@ -75,9 +84,7 @@ final class BootstrapController extends Controller
 				'wc_staff_pos_price_override' => current_user_can('wc_staff_pos_price_override'),
 			],
 			'supportedProductTypes' => $this->product_adapter->get_supported_types(),
-			'cart'                  => $this->cart_context->run(
-				fn (): array => $this->cart_context->get_snapshot()
-			),
+			'cart'                  => $cart,
 			'manualTenderTypes'     => $this->get_tender_types(),
 		];
 	}

@@ -7,6 +7,7 @@ namespace WCStaffPOS\Domain;
 use WC_Cart;
 use WCStaffPOS\Domain\Adapters\CurrencyContextAdapterInterface;
 use WCStaffPOS\Domain\Adapters\ProductConfigurationAdapterInterface;
+use WP_Error;
 
 final class PosCartContext
 {
@@ -61,11 +62,24 @@ final class PosCartContext
 	/**
 	 * @template T
 	 * @param callable():T $callback
-	 * @return T
+	 * @return T|WP_Error Returns WP_Error if the WooCommerce cart/session
+	 *         cannot be prepared — a caching or session plugin has broken
+	 *         WC_Session. Callers are expected to propagate this so REST
+	 *         consumers get a structured error instead of an uncaught
+	 *         exception / 500.
 	 */
 	public function run(callable $callback)
 	{
-		$this->ensure_woocommerce();
+		try {
+			$this->ensure_woocommerce();
+		} catch (\RuntimeException $e) {
+			return new WP_Error(
+				'wc_staff_pos_session_unavailable',
+				$e->getMessage(),
+				['status' => 503]
+			);
+		}
+
 		$this->currency_adapter->bootstrap();
 		$this->original_session = $this->capture_cart_session();
 
@@ -75,10 +89,14 @@ final class PosCartContext
 			wc_clear_notices();
 		}
 
-		$this->hydrate_pos_session();
+		// Mark active BEFORE hydration so the calculate_totals() that runs
+		// inside hydrate_pos_session() sees the gates as open — otherwise
+		// read-only routes like GET /cart would return stale totals on the
+		// first pass, missing POS discounts and _wc_pos_custom_price.
 		self::$active_depth++;
 
 		try {
+			$this->hydrate_pos_session();
 			$result = $callback();
 			$this->persist_pos_session();
 

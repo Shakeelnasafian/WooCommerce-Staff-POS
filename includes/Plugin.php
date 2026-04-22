@@ -42,11 +42,18 @@ final class Plugin
 		if (! class_exists('WooCommerce')) {
 			// WooCommerce may still load at a later priority (wrapper/mu-plugins,
 			// deferred activation). Retry once it announces itself, and only show
-			// the admin notice if it never arrives.
+			// the admin notice if it never arrives. render_woocommerce_notice()
+			// also re-checks class_exists() at render time so the banner is never
+			// shown when a late load succeeds in the same request.
 			add_action('woocommerce_loaded', [$this, 'boot']);
 			add_action('admin_notices', [$this, 'render_woocommerce_notice']);
 			return;
 		}
+
+		// If this boot is running via the woocommerce_loaded retry path, the
+		// missing-WooCommerce notice from the first attempt is still queued.
+		// Drop it now that we're actually booting.
+		remove_action('admin_notices', [$this, 'render_woocommerce_notice']);
 
 		$product_adapter = new DefaultProductConfigurationAdapter();
 		$cart_context    = new PosCartContext(
@@ -165,6 +172,13 @@ final class Plugin
 
 	public function render_woocommerce_notice(): void
 	{
+		// Defensive: if WooCommerce loaded after the initial boot attempt
+		// registered this callback, suppress the banner rather than lying
+		// to the admin about WooCommerce being absent.
+		if (class_exists('WooCommerce')) {
+			return;
+		}
+
 		if (! current_user_can('activate_plugins')) {
 			return;
 		}
