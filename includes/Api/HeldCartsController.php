@@ -84,7 +84,7 @@ final class HeldCartsController extends Controller
 		return ['items' => $this->cart_context->list_held_carts()];
 	}
 
-	public function create_item(WP_REST_Request $request): array
+	public function create_item(WP_REST_Request $request): array|WP_Error
 	{
 		$name = (string) ($request->get_param('name') ?: '');
 

@@ -95,15 +95,19 @@ final class CartController extends Controller
 		);
 	}
 
-	public function get_cart(WP_REST_Request $request): array
+	public function get_cart(WP_REST_Request $request): array|WP_Error
 	{
 		unset($request);
 
-		return [
-			'cart' => $this->cart_context->run(
-				fn (): array => $this->cart_context->get_snapshot()
-			),
-		];
+		$cart = $this->cart_context->run(
+			fn (): array => $this->cart_context->get_snapshot()
+		);
+
+		if (is_wp_error($cart)) {
+			return $cart;
+		}
+
+		return ['cart' => $cart];
 	}
 
 	public function add_item(WP_REST_Request $request): array|WP_Error
@@ -223,7 +227,7 @@ final class CartController extends Controller
 		);
 	}
 
-	public function clear_cart(WP_REST_Request $request): array
+	public function clear_cart(WP_REST_Request $request): array|WP_Error
 	{
 		unset($request);
 
@@ -272,7 +276,7 @@ final class CartController extends Controller
 		);
 	}
 
-	public function remove_coupon(WP_REST_Request $request): array
+	public function remove_coupon(WP_REST_Request $request): array|WP_Error
 	{
 		$code = wc_format_coupon_code((string) $request['code']);
 

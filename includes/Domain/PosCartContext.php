@@ -7,6 +7,7 @@ namespace WCStaffPOS\Domain;
 use WC_Cart;
 use WCStaffPOS\Domain\Adapters\CurrencyContextAdapterInterface;
 use WCStaffPOS\Domain\Adapters\ProductConfigurationAdapterInterface;
+use WP_Error;
 
 final class PosCartContext
 {
@@ -37,6 +38,19 @@ final class PosCartContext
 	 */
 	private array $original_session = [];
 
+	/**
+	 * Depth counter for run(). Non-zero means the current PHP request is
+	 * inside a POS cart context, so site-wide hooks can opt into POS-only
+	 * behaviour instead of firing on every WooCommerce cart calculation
+	 * (mini-cart, checkout, Store API, subscription renewals, etc.).
+	 */
+	private static int $active_depth = 0;
+
+	public static function is_active(): bool
+	{
+		return self::$active_depth > 0;
+	}
+
 	public function __construct(
 		CurrencyContextAdapterInterface $currency_adapter,
 		ProductConfigurationAdapterInterface $product_adapter
@@ -48,11 +62,24 @@ final class PosCartContext
 	/**
 	 * @template T
 	 * @param callable():T $callback
-	 * @return T
+	 * @return T|WP_Error Returns WP_Error if the WooCommerce cart/session
+	 *         cannot be prepared — a caching or session plugin has broken
+	 *         WC_Session. Callers are expected to propagate this so REST
+	 *         consumers get a structured error instead of an uncaught
+	 *         exception / 500.
 	 */
 	public function run(callable $callback)
 	{
-		$this->ensure_woocommerce();
+		try {
+			$this->ensure_woocommerce();
+		} catch (\RuntimeException $e) {
+			return new WP_Error(
+				'wc_staff_pos_session_unavailable',
+				$e->getMessage(),
+				['status' => 503]
+			);
+		}
+
 		$this->currency_adapter->bootstrap();
 		$this->original_session = $this->capture_cart_session();
 
@@ -62,14 +89,20 @@ final class PosCartContext
 			wc_clear_notices();
 		}
 
-		$this->hydrate_pos_session();
+		// Mark active BEFORE hydration so the calculate_totals() that runs
+		// inside hydrate_pos_session() sees the gates as open — otherwise
+		// read-only routes like GET /cart would return stale totals on the
+		// first pass, missing POS discounts and _wc_pos_custom_price.
+		self::$active_depth++;
 
 		try {
+			$this->hydrate_pos_session();
 			$result = $callback();
 			$this->persist_pos_session();
 
 			return $result;
 		} finally {
+			self::$active_depth--;
 			$this->restore_cart_session($this->original_session);
 
 			if (function_exists('wc_clear_notices')) {
@@ -167,6 +200,13 @@ final class PosCartContext
 
 		if (! WC()->session && method_exists(WC(), 'initialize_session')) {
 			WC()->initialize_session();
+		}
+
+		// A third-party session handler can silently refuse to initialise
+		// (common with aggressive caching / session plugins). Fail loudly
+		// here rather than fataling deep in a WC()->session->get() call.
+		if (! is_object(WC()->session)) {
+			throw new \RuntimeException('WooCommerce session is not available. A session or caching plugin may be preventing WC_Session from initialising.');
 		}
 
 		if (! WC()->customer) {

@@ -40,9 +40,20 @@ final class Plugin
 		}
 
 		if (! class_exists('WooCommerce')) {
+			// WooCommerce may still load at a later priority (wrapper/mu-plugins,
+			// deferred activation). Retry once it announces itself, and only show
+			// the admin notice if it never arrives. render_woocommerce_notice()
+			// also re-checks class_exists() at render time so the banner is never
+			// shown when a late load succeeds in the same request.
+			add_action('woocommerce_loaded', [$this, 'boot']);
 			add_action('admin_notices', [$this, 'render_woocommerce_notice']);
 			return;
 		}
+
+		// If this boot is running via the woocommerce_loaded retry path, the
+		// missing-WooCommerce notice from the first attempt is still queued.
+		// Drop it now that we're actually booting.
+		remove_action('admin_notices', [$this, 'render_woocommerce_notice']);
 
 		$product_adapter = new DefaultProductConfigurationAdapter();
 		$cart_context    = new PosCartContext(
@@ -59,9 +70,16 @@ final class Plugin
 		add_action('init', [$this, 'sync_pos_capability']);
 
 		// Apply a whole-cart discount stored in the POS session.
+		// Gated on PosCartContext::is_active() so this never affects the
+		// storefront cart, checkout, Store API, subscription renewals, or
+		// any other site-wide cart calculation triggered by other plugins.
 		add_action(
 			'woocommerce_cart_calculate_fees',
 			static function (WC_Cart $cart): void {
+				if (! PosCartContext::is_active()) {
+					return;
+				}
+
 				if (! WC()->session) {
 					return;
 				}
@@ -92,9 +110,16 @@ final class Plugin
 		);
 
 		// Apply any per-line custom price stored in cart item data.
+		// Gated on PosCartContext::is_active() so a stray _wc_pos_custom_price
+		// key (e.g. from cart data imported by another plugin) cannot silently
+		// override prices on the storefront cart.
 		add_action(
 			'woocommerce_before_calculate_totals',
 			static function (WC_Cart $cart): void {
+				if (! PosCartContext::is_active()) {
+					return;
+				}
+
 				foreach ($cart->get_cart() as $item) {
 					if (! empty($item['_wc_pos_custom_price'])) {
 						$item['data']->set_price((float) $item['_wc_pos_custom_price']);
@@ -147,6 +172,13 @@ final class Plugin
 
 	public function render_woocommerce_notice(): void
 	{
+		// Defensive: if WooCommerce loaded after the initial boot attempt
+		// registered this callback, suppress the banner rather than lying
+		// to the admin about WooCommerce being absent.
+		if (class_exists('WooCommerce')) {
+			return;
+		}
+
 		if (! current_user_can('activate_plugins')) {
 			return;
 		}
